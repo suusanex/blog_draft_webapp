@@ -1,0 +1,2 @@
+# blog_draft_webapp
+blog_draft_learn_and_suggest リポジトリ（WinUI 3）の機能を目的に合わせて絞り直したWebアプリ版
