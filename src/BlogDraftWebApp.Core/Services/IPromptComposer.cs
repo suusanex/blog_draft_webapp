@@ -1,0 +1,8 @@
+using BlogDraftWebApp.Core.Models;
+
+namespace BlogDraftWebApp.Core.Services;
+
+public interface IPromptComposer
+{
+    Task<Prompt> ComposeAsync(BlogOverview overview, IReadOnlyList<RAGChunk> ragChunks, StyleCard styleCard, CancellationToken cancellationToken);
+}

@@ -11,7 +11,7 @@ WinUI 3 デスクトップアプリで提供していた「ブログ下書き生
 
 ## Technical Context
 
-**Language/Version**: C# 12 / .NET 9  
+**Language/Version**: C# 12 / .NET 10  
 **Primary Dependencies**:  
 - Blazor Web App (Interactive Server モード)  
 - ASP.NET Core Minimal API または Controllers（保守性重視で選択）  

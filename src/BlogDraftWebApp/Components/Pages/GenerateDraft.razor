@@ -1,0 +1,218 @@
+@page "/generate"
+
+@using System.Net
+@using System.Net.Http.Json
+@using System.ComponentModel.DataAnnotations
+@using BlogDraftWebApp.Api.Models
+@using Markdig
+@inject IHttpClientFactory HttpClientFactory
+@inject IJSRuntime JS
+@inject NavigationManager Nav
+
+<PageTitle>Generate Draft</PageTitle>
+
+<h1>ブログ下書き生成</h1>
+
+<EditForm Model="_model" OnValidSubmit="SubmitAsync">
+    <DataAnnotationsValidator />
+
+    <div class="mb-3">
+        <label class="form-label">記事の概要</label>
+        <InputTextArea class="form-control" @bind-Value="_model.Overview" rows="10" />
+        <ValidationMessage For="() => _model.Overview" />
+    </div>
+
+    <div class="form-check mb-3">
+        <InputCheckbox class="form-check-input" @bind-Value="_isPreviewMode" id="previewMode" />
+        <label class="form-check-label" for="previewMode">プレビューモード（LLM 入力内容を表示）</label>
+    </div>
+
+    <button class="btn btn-primary" type="submit" disabled="@IsGenerateDisabled">@(_isBusy ? "生成中..." : (_isPreviewMode ? "プレビュー" : "下書きを生成"))</button>
+    @if (_isBusy)
+    {
+        <span class="ms-2">生成中...</span>
+    }
+</EditForm>
+
+@if (!string.IsNullOrWhiteSpace(_warning))
+{
+    <div class="alert alert-warning mt-3">@_warning</div>
+}
+
+@if (_error is not null)
+{
+    <div class="alert alert-danger mt-3">
+        <div>@_error.Message</div>
+        @if (_error.IsRetryable)
+        {
+            <button class="btn btn-outline-danger mt-2" @onclick="RetryAsync">再試行</button>
+        }
+    </div>
+}
+
+@if (!string.IsNullOrWhiteSpace(_promptPreview))
+{
+    <div class="alert alert-warning mt-3">この内容には機密情報が含まれる可能性があります。画面のスクリーンショットや共有にご注意ください</div>
+
+    <div class="mt-4 d-flex gap-2">
+        <button class="btn btn-secondary" @onclick="CopyPromptAsync">コピー</button>
+        @if (!string.IsNullOrWhiteSpace(_copyPromptMessage))
+        {
+            <span class="align-self-center">@_copyPromptMessage</span>
+        }
+    </div>
+
+    <h2 class="mt-3">LLM 入力内容（プレビュー）</h2>
+    <pre class="border p-3" style="white-space: pre-wrap;">@_promptPreview</pre>
+}
+
+@if (!string.IsNullOrWhiteSpace(_draftMarkdown))
+{
+    <div class="mt-4 d-flex gap-2">
+        <button class="btn btn-secondary" @onclick="CopyDraftAsync">コピー</button>
+        @if (!string.IsNullOrWhiteSpace(_copyMessage))
+        {
+            <span class="align-self-center">@_copyMessage</span>
+        }
+    </div>
+
+    <h2 class="mt-3">生成結果（Markdown）</h2>
+    <pre class="border p-3" style="white-space: pre-wrap;">@_draftMarkdown</pre>
+
+    <h2 class="mt-3">プレビュー</h2>
+    <div class="border p-3">@((MarkupString)_draftHtml)</div>
+}
+
+@code {
+    private sealed class GenerateDraftViewModel
+    {
+        [Required(ErrorMessage = "記事の概要を入力してください")]
+        [MinLength(10, ErrorMessage = "概要は 10 文字以上入力してください")]
+        [MaxLength(5000, ErrorMessage = "概要は 5000 文字以内で入力してください")]
+        public string Overview { get; set; } = string.Empty;
+    }
+
+    private readonly MarkdownPipeline _pipeline = new MarkdownPipelineBuilder().UseAdvancedExtensions().DisableHtml().Build();
+
+    private GenerateDraftViewModel _model = new();
+    private bool _isBusy;
+    private bool _isPreviewMode;
+    private string? _draftMarkdown;
+    private string _draftHtml = string.Empty;
+    private string? _promptPreview;
+    private string? _warning;
+    private string? _copyMessage;
+    private string? _copyPromptMessage;
+    private ErrorResponse? _error;
+
+    private bool IsGenerateDisabled => _isBusy || string.IsNullOrWhiteSpace(_model.Overview);
+
+    private Task SubmitAsync() => _isPreviewMode ? PreviewAsync() : GenerateAsync();
+
+    private async Task PreviewAsync()
+    {
+        _isBusy = true;
+        _error = null;
+        _warning = null;
+        _copyMessage = null;
+        _copyPromptMessage = null;
+        _draftMarkdown = null;
+        _draftHtml = string.Empty;
+        _promptPreview = null;
+
+        try
+        {
+            var http = HttpClientFactory.CreateClient();
+            http.BaseAddress = new Uri(Nav.BaseUri);
+
+            var response = await http.PostAsJsonAsync("/draft/preview", new PreviewPromptRequest { Overview = _model.Overview });
+            if (response.StatusCode == HttpStatusCode.OK)
+            {
+                var payload = await response.Content.ReadFromJsonAsync<PreviewPromptResponse>();
+                _promptPreview = payload?.Prompt;
+                _warning = payload?.Warning;
+                return;
+            }
+
+            _error = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+            _error ??= new ErrorResponse
+            {
+                ErrorCode = "UNKNOWN",
+                Message = "エラーが発生しました",
+                IsRetryable = false,
+            };
+        }
+        finally
+        {
+            _isBusy = false;
+        }
+    }
+
+    private async Task GenerateAsync()
+    {
+        _isBusy = true;
+        _error = null;
+        _warning = null;
+        _copyMessage = null;
+        _copyPromptMessage = null;
+        _draftMarkdown = null;
+        _draftHtml = string.Empty;
+        _promptPreview = null;
+
+        try
+        {
+            var http = HttpClientFactory.CreateClient();
+            http.BaseAddress = new Uri(Nav.BaseUri);
+
+            var response = await http.PostAsJsonAsync("/draft", new GenerateDraftRequest { Overview = _model.Overview });
+            if (response.StatusCode == HttpStatusCode.OK)
+            {
+                var payload = await response.Content.ReadFromJsonAsync<GenerateDraftResponse>();
+                _draftMarkdown = payload?.Draft;
+                _warning = payload?.Warning;
+
+                if (!string.IsNullOrWhiteSpace(_draftMarkdown))
+                {
+                    _draftHtml = Markdig.Markdown.ToHtml(_draftMarkdown, _pipeline);
+                }
+                return;
+            }
+
+            _error = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+            _error ??= new ErrorResponse
+            {
+                ErrorCode = "UNKNOWN",
+                Message = "エラーが発生しました",
+                IsRetryable = false,
+            };
+        }
+        finally
+        {
+            _isBusy = false;
+        }
+    }
+
+    private Task RetryAsync() => GenerateAsync();
+
+    private async Task CopyDraftAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_draftMarkdown))
+        {
+            return;
+        }
+
+        await JS.InvokeVoidAsync("navigator.clipboard.writeText", _draftMarkdown);
+        _copyMessage = "コピーしました";
+    }
+
+    private async Task CopyPromptAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_promptPreview))
+        {
+            return;
+        }
+
+        await JS.InvokeVoidAsync("navigator.clipboard.writeText", _promptPreview);
+        _copyPromptMessage = "コピーしました";
+    }
+}

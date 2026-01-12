@@ -1,0 +1,47 @@
+@page "/configuration-error"
+
+@using BlogDraftWebApp.Core.Services
+@inject ConfigurationStatus ConfigurationStatus
+@inject IHostEnvironment HostEnvironment
+
+<PageTitle>Configuration Error</PageTitle>
+
+<h1>設定エラー</h1>
+
+<div class="alert alert-danger" role="alert">
+    システムが正しく構成されていません。管理者に連絡してください。
+</div>
+
+@if (HostEnvironment.IsDevelopment())
+{
+    <div class="alert alert-warning" role="alert">
+        <strong>開発環境向け情報:</strong> 起動ログ（コンソール）に設定エラーが出力されています。
+    </div>
+
+    @if (ConfigurationStatus.Errors.Count > 0)
+    {
+        <h2>検出された問題</h2>
+        <ul>
+            @foreach (var error in ConfigurationStatus.Errors)
+            {
+                <li>@error</li>
+            }
+        </ul>
+    }
+
+    <h2>設定例</h2>
+    <p>秘匿情報は <code>appsettings.json</code> に入れず、User Secrets / 環境変数 / Key Vault を利用してください。</p>
+
+    <pre><code class="language-json">{
+  "OpenAI": {
+    "ApiKey": "(secret)",
+    "Model": "gpt-4o",
+    "BaseUrl": "https://api.openai.com/v1",
+    "RequestTimeoutSeconds": 120
+  },
+  "StyleCard": {
+    "SystemPrompt": "(secret)",
+    "Content": "(secret)"
+  }
+}</code></pre>
+}

@@ -13,7 +13,7 @@
 
 ### 必須
 
-- **.NET 9 SDK**: [ダウンロード](https://dotnet.microsoft.com/download/dotnet/9.0)
+- **.NET 10 SDK**: [ダウンロード](https://dotnet.microsoft.com/download/dotnet/10.0)
 - **Visual Studio Code** または **Visual Studio 2022**
 - **Azure AI Search インスタンス**: RAG 機能を使用する場合（オプション）
 - **OpenAI API キー**: LLM 生成に必要（または OpenAI 互換 API）
@@ -105,7 +105,7 @@ dotnet build
 ### エラーが発生した場合
 
 - 依存パッケージが不足している場合、`dotnet restore` を実行。
-- .NET SDK のバージョンを確認: `dotnet --version`（9.0 以降であること）。
+- .NET SDK のバージョンを確認: `dotnet --version`（10.0 以降であること）。
 
 ---
 
@@ -321,7 +321,7 @@ dotnet user-secrets set "OpenAI:RequestTimeoutSeconds" "180"
 
 1. Azure App Service を作成:
    ```powershell
-   az webapp create --resource-group myResourceGroup --plan myAppServicePlan --name blog-draft-webapp --runtime "DOTNET|9.0"
+   az webapp create --resource-group myResourceGroup --plan myAppServicePlan --name blog-draft-webapp --runtime "DOTNET|10.0"
    ```
 
 2. Application Settings で秘匿情報を設定:
@@ -348,12 +348,12 @@ dotnet user-secrets set "OpenAI:RequestTimeoutSeconds" "180"
 #### Dockerfile 例
 
 ```dockerfile
-FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS base
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS base
 WORKDIR /app
 EXPOSE 80
 EXPOSE 443
 
-FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 COPY ["src/BlogDraftWebApp/BlogDraftWebApp.csproj", "BlogDraftWebApp/"]
 RUN dotnet restore "BlogDraftWebApp/BlogDraftWebApp.csproj"

@@ -416,3 +416,8 @@ FodyWeavers.xsd
 *.msix
 *.msm
 *.msp
+
+# Local-only secret files (do not commit)
+**/secrets.json
+**/secrets.*.json
+**/*appsettings.*.local.json
