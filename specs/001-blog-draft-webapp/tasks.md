@@ -6,7 +6,7 @@
 
 **Feature Name**: ブログ下書き生成 Web アプリケーション
 
-**Tests**: テストタスクは spec.md で明示的に要求されていないため、含めていません。UnitTest は個別の実装タスク内で一緒に作成します。
+**Tests**: Constitution の「可能な限りUnitTestでのテストを行う」原則に従い、各実装タスク内にUnitTestを同梱するか、明示的なテストタスクで対応します。タスクの注記を参照してください。
 
 **Organization**: タスクは User Story 単位でグループ化され、各ストーリーを独立して実装・テスト可能にしています。
 
@@ -65,12 +65,13 @@
 
 - [ ] T021 ErrorResponse モデル作成: `src/BlogDraftWebApp.Api/Models/ErrorResponse.cs`（ErrorCode, Message, Details, RequestId）
 - [ ] T022 グローバル例外ハンドラミドルウェア作成: `src/BlogDraftWebApp.Api/Middleware/GlobalExceptionHandler.cs`（例外を ErrorResponse に変換）
+- [ ] T022b [P] LLM 例外分類実装: `src/BlogDraftWebApp.Core/Services/LlmErrorClassifier.cs`（HTTP/SDK 例外から ErrorCode・メッセージを判定：認証エラー、レート制限、タイムアウト、サービスエラー等）
 - [ ] T023 カスタム例外クラス作成: `src/BlogDraftWebApp.Core/Exceptions/LlmException.cs`、`RagException.cs`、`ConfigurationException.cs`
 
 ### DI 設定
 
 - [ ] T024 DI コンテナ設定: `src/BlogDraftWebApp/Program.cs` で Options パターン、サービス登録、ライフタイム管理を実装
-- [ ] T025 起動時設定バリデーション: `src/BlogDraftWebApp/Program.cs` で必須設定（API キー、文体カード）の存在確認
+- [ ] T025 起動時設定バリデーション: `src/BlogDraftWebApp/Program.cs` で必須設定（API キー、文体カード）の存在確認、読み込み失敗時に起動失敗させる
 
 **Checkpoint**: 基盤完成。設定・ログ・エラーハンドリングが動作し、User Story 実装を開始可能。
 
@@ -96,12 +97,14 @@
 - [ ] T032 [US1] Azure AI Search 実装: `src/BlogDraftWebApp.Core/Services/AzureAISearchService.cs`（ベクトル検索、Top-K、スコア閾値、エラーハンドリング）
 - [ ] T033 [US1] RAG 整形ロジック実装: `AzureAISearchService.cs` 内で重複除外、長さ制限（500文字）、出典情報付与
 - [ ] T034 [US1] RAG フォールバック実装: 検索失敗時に空配列を返し、警告ログを出力
+- [ ] T034b [US1] 生成結果の長さチェック実装: LLM 生成後、結果が 100 文字未満の場合は警告メッセージ「生成結果が短すぎます。入力内容を詳しくするか、設定を確認してください」を返却
 
 ### LLM クライアント（US1）
 
 - [ ] T035 [US1] LLM クライアントインターフェース作成: `src/BlogDraftWebApp.Core/Services/ILlmClient.cs`（GenerateAsync(prompt) → Draft）
 - [ ] T036 [US1] OpenAI 互換クライアント実装: `src/BlogDraftWebApp.Core/Services/OpenAIClient.cs`（Azure.AI.OpenAI SDK 使用、タイムアウト 120 秒、追加パラメータ対応）
 - [ ] T037 [US1] タイムアウトハンドリング実装: `OpenAIClient.cs` で RequestTimeoutSeconds を適用、タイムアウト時に LlmException をスロー
+- [ ] T037b [US1] 再試行可能なエラー判定: `OpenAIClient.cs` または `DraftEndpoints.cs` で再試行可能なエラー（タイムアウト、HTTP 503/429 等）を判定、レスポンスに "IsRetryable" フラグを含める
 
 ### プロンプト合成（US1）
 
@@ -115,19 +118,21 @@
 - [ ] T042 [US1] GenerateDraftRequest DTO 作成: `src/BlogDraftWebApp.Api/Models/GenerateDraftRequest.cs`（Overview + バリデーション属性）
 - [ ] T043 [US1] GenerateDraftResponse DTO 作成: `src/BlogDraftWebApp.Api/Models/GenerateDraftResponse.cs`（Draft, Model, GeneratedAt, RagHitCount, Warning）
 - [ ] T044 [US1] /draft エンドポイント実装: `src/BlogDraftWebApp.Api/Endpoints/DraftEndpoints.cs`（Minimal API）
-  - バリデーション → RAG 検索 → プロンプト合成 → LLM 生成 → レスポンス返却
+  - バリデーション（空入力は 400 で拒否） → RAG 検索 → プロンプト合成 → LLM 生成 → レスポンス返却
   - RAG 失敗時は警告を追加して生成継続
-  - エラー時は適切な HTTP ステータスと ErrorResponse を返却
+  - エラー時は適切な HTTP ステータスと ErrorResponse を返却（IsRetryable フラグ含む）
 
 ### Blazor UI（US1）
 
 - [ ] T045 [US1] 生成ページ Blazor コンポーネント作成: `src/BlogDraftWebApp/Components/Pages/GenerateDraft.razor`
   - 概要入力フォーム（Textarea、10〜5000 文字バリデーション）
-  - 「下書きを生成」ボタン（入力が空の場合は無効化）
+  - 「下書きを生成」ボタン（**入力が空の場合は無効化**）
   - 生成結果表示エリア（Markdown レンダリング）
   - 「コピー」ボタン（Clipboard API でコピー、確認メッセージ表示）
+  - エラー時に「再試行」ボタンを表示（IsRetryable フラグ判定）
 - [ ] T046 [US1] 生成中ローディング表示: `GenerateDraft.razor` でスピナー + "生成中..." メッセージ
 - [ ] T047 [US1] エラーメッセージ表示: `GenerateDraft.razor` で ErrorResponse を解析し、ユーザーフレンドリーなメッセージを表示
+- [ ] T047b [US1] 再試行ボタン表示: `GenerateDraft.razor` で IsRetryable フラグが true の場合、「再試行」ボタンを表示し、同じリクエストを再度送信可能にする
 - [ ] T048 [US1] 警告メッセージ表示: RAG 失敗時の警告（"関連記事の検索に失敗しました"）をアラートで表示
 
 ### DI 登録（US1）
@@ -137,9 +142,9 @@
 
 ### UnitTests（US1）
 
-- [ ] T051 [P] [US1] PromptComposer テスト作成: `tests/BlogDraftWebApp.Core.UnitTests/Services/PromptComposerTests.cs`（RAGあり/なし、文体カード結合を検証）
-- [ ] T052 [P] [US1] AzureAISearchService テスト作成: `tests/BlogDraftWebApp.Core.UnitTests/Services/AzureAISearchServiceTests.cs`（モックで検索成功/失敗、重複除外、スコア閾値を検証）
-- [ ] T053 [P] [US1] OpenAIClient テスト作成: `tests/BlogDraftWebApp.Core.UnitTests/Services/OpenAIClientTests.cs`（モックでタイムアウト、エラーハンドリングを検証）
+- [ ] T051 [P] [US1] PromptComposer テスト作成: `tests/BlogDraftWebApp.Core.UnitTests/Services/PromptComposerTests.cs`（RAGあり/なし、文体カード結合を検証、Assert.That 形式）
+- [ ] T052 [P] [US1] AzureAISearchService テスト作成: `tests/BlogDraftWebApp.Core.UnitTests/Services/AzureAISearchServiceTests.cs`（モックで検索成功/失敗、重複除外、スコア閾値を検証、Assert.That 形式）
+- [ ] T053 [P] [US1] OpenAIClient テスト作成: `tests/BlogDraftWebApp.Core.UnitTests/Services/OpenAIClientTests.cs`（モックでタイムアウト、エラーハンドリングを検証、Assert.That 形式）
 
 **Checkpoint**: User Story 1 が完全に動作。ユーザーが概要を入力すると、RAG + 文体カード + LLM で下書きが生成される。
 
@@ -179,6 +184,7 @@
 - [ ] T062 [P] [US2] /draft/preview エンドポイントテスト作成: `tests/BlogDraftWebApp.Api.IntegrationTests/DraftEndpointsTests.cs`
   - プレビューモードで LLM API が呼び出されないことを検証（モックの呼び出し回数 = 0）
   - プロンプト全文が実際の生成時と 100% 一致することを検証
+  - 再試行可能エラー判定のテスト（タイムアウト/503/429）を含む
 
 **Checkpoint**: User Story 2 が独立して動作。プレビューモードで LLM 入力内容を確認でき、LLM API コストが発生しない。
 
@@ -210,6 +216,7 @@
   - 起動時設定エラー時にこのページにリダイレクト
   - メッセージ: "システムが正しく構成されていません。管理者に連絡してください"
   - エラーログへのリンク（開発環境のみ）
+  - 設定ファイルの例（引用）を記載して復旧を支援
 
 ### ドキュメント（US3）
 
