@@ -59,6 +59,7 @@ builder.Services.AddSingleton<IValidateOptions<LlmOptions>, LlmOptionsValidator>
 builder.Services.AddSingleton<IValidateOptions<RagOptions>, RagOptionsValidator>();
 builder.Services.AddSingleton<IValidateOptions<StyleCardOptions>, StyleCardOptionsValidator>();
 builder.Services.AddSingleton<IPostConfigureOptions<LlmOptions>, LlmOptionsPostConfigure>();
+builder.Services.AddSingleton<IPostConfigureOptions<StyleCardOptions>, StyleCardPostConfigure>();
 
 builder.Services.AddOptions<LlmOptions>().Bind(builder.Configuration.GetSection("OpenAI"));
 builder.Services.AddOptions<RagOptions>().Bind(builder.Configuration.GetSection("AzureAISearch"));

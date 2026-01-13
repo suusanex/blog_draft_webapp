@@ -15,9 +15,13 @@ public sealed class StyleCardOptionsValidator : IValidateOptions<StyleCardOption
             failures.Add("StyleCard:SystemPrompt is required.");
         }
 
-        if (string.IsNullOrWhiteSpace(options.Content))
+        // Content は FilePath または直接の指定のいずれかが必須
+        var hasContent = !string.IsNullOrWhiteSpace(options.Content);
+        var hasFilePath = !string.IsNullOrWhiteSpace(options.FilePath);
+
+        if (!hasContent && !hasFilePath)
         {
-            failures.Add("StyleCard:Content is required.");
+            failures.Add("StyleCard:Content or StyleCard:FilePath must be specified.");
         }
 
         return failures.Count == 0 ? ValidateOptionsResult.Success : ValidateOptionsResult.Fail(failures);
