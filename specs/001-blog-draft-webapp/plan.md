@@ -125,14 +125,153 @@ tests/
 │   │   └── OpenAIClientTests.cs（モック使用）
 │   └── Models/
 │
+├── BlogDraftWebApp.Components.Tests/  # Blazor コンポーネントの単体テスト（bUnit）
+│   ├── Pages/
+│   │   └── GenerateDraftTests.cs     # GenerateDraft.razor のロジックテスト
+│   ├── Mocks/
+│   │   ├── MockHttpClientFactory.cs  # HTTP クライアントモック
+│   │   ├── MockJSRuntime.cs          # JavaScript インターロップモック
+│   │   └── MockNavigationManager.cs  # ナビゲーションモック
+│   └── Fixtures/
+│       └── GenerateDraftFixture.cs   # テスト用フィクスチャ
+│
 ├── BlogDraftWebApp.Api.IntegrationTests/  # API の統合テスト
 │   ├── DraftEndpointsTests.cs        # 外部 API をモック化
 │   └── TestFixtures/                 # テスト用設定、スタブ
+│
+├── BlogDraftWebApp.E2E.Tests/        # E2E テスト（Playwright）
+│   ├── Pages/
+│   │   └── GenerateDraftPageTests.cs # UI フロー全体のテスト
+│   ├── Fixtures/
+│   │   └── BrowserFixture.cs         # ブラウザセットアップ
+│   └── appsettings.e2e.json          # E2E テスト用設定
 │
 └── BlogDraftWebApp.Tests.Common/     # テスト共通ライブラリ（Moq ヘルパー等）
 ```
 
 **Structure Decision**: モジュラーモノリス構成を採用。Blazor UI、API レイヤー、ドメインロジックを同一ソリューション内の複数プロジェクトに分割し、保守性とテスタビリティを確保。外部依存（Azure AI Search、LLM API）はインターフェースで抽象化し、テスト時にモック化可能。単一 C# 技術者が運用するため、過度なマイクロサービス分割は避ける。
+
+## Testing Strategy
+
+### Test Pyramid
+
+本プロジェクトは、以下のテストピラミッド構造に基づいて全機能をテストする：
+
+```
+                    ╱╲
+                   ╱  ╲         E2E テスト（Playwright）
+                  ╱____╲        - ユーザーフロー全体を検証
+                 ╱      ╲       - ブラウザ自動化
+                ╱        ╲       
+               ╱  統合     ╲      統合テスト（WebApplicationFactory）
+              ╱   テスト    ╲     - API エンドポイント検証
+             ╱              ╲    - 外部依存をモック化
+            ╱________________╲   
+           ╱  ユニットテスト   ╲   ユニットテスト（NUnit + Moq / bUnit）
+          ╱                  ╲  - コアロジック検証
+         ╱____________________╲  - UI コンポーネントロジック検証
+```
+
+### Testing Layers
+
+#### 1. ユニットテスト（Unit Tests）
+
+**対象**: コアビジネスロジック、Blazor コンポーネントロジック
+
+**フレームワーク**:
+- **NUnit + Moq**: Core 層のビジネスロジック
+- **bUnit + NUnit + Moq**: Blazor コンポーネント
+
+**テスト対象と必須項目**:
+
+| レイヤー | テスト対象 | 必須カバレッジ |
+|---------|----------|--------------|
+| **Core.Services** | PromptComposer, AzureAISearchService, OpenAIClient | 全メソッド、全分岐 |
+| **Core.Configuration** | Validator, PostConfigure クラス | 全設定パターン |
+| **Components.Pages** | GenerateDraft.razor（状態管理、入力検証、非同期処理） | 全メソッド、全状態遷移 |
+
+**bUnit テスト必須項目（GenerateDraft.razor）**:
+- ✅ 入力値変更時の状態更新（`OnOverviewChanged`）
+- ✅ 最小・最大文字数の検証ロジック
+- ✅ ボタン無効化ロジック（`IsGenerateDisabled`）
+- ✅ `GenerateAsync()` - 正常系、エラー系、状態管理
+- ✅ `PreviewAsync()` - LLM を呼び出さないこと
+- ✅ Markdown から HTML への変換
+- ✅ JavaScript インターロップ呼び出し（`CopyDraftAsync`, `CopyPromptAsync`）
+- ✅ 条件付き UI 表示ロジック
+- ✅ エラー・警告メッセージの表示制御
+- ✅ `RetryAsync()` によるリトライ機能
+
+**モック戦略**:
+- `IHttpClientFactory`: テスト用 HttpClient を返すモック
+- `IJSRuntime`: JavaScript 呼び出しをモック化
+- `NavigationManager`: ナビゲーション動作をモック化
+- 外部 API（Azure AI Search、LLM）: Moq でインターフェースをモック化
+
+#### 2. 統合テスト（Integration Tests）
+
+**対象**: API エンドポイント、複数コンポーネント間の連携
+
+**フレームワーク**: NUnit + WebApplicationFactory + Moq
+
+**テスト対象と必須項目**:
+
+| エンドポイント | 必須テストシナリオ |
+|--------------|------------------|
+| `/draft` | 正常系、タイムアウト、RAG 失敗時のフォールバック、短い生成結果の警告 |
+| `/draft/preview` | LLM 呼び出しなし、プロンプト内容の正確性、RAG 統合 |
+| `/health` | ヘルスチェック応答 |
+
+**統合テスト戦略**:
+- `TestWebApplicationFactory` で Web アプリ全体をホスト
+- 外部依存（Azure AI Search、LLM API）はモック化
+- 実際の HTTP リクエスト・レスポンスを検証
+- 設定不備時の起動失敗を検証
+
+#### 3. E2E テスト（End-to-End Tests）
+
+**対象**: ユーザーが実際に操作する UI フロー全体
+
+**フレームワーク**: Playwright + NUnit
+
+**テスト対象と必須シナリオ**:
+
+| カテゴリ | 必須シナリオ |
+|---------|------------|
+| **正常系フロー** | テキスト入力 → 生成ボタン → 下書き表示 → コピー |
+| | テキスト入力 → プレビューボタン → プロンプト表示 → コピー |
+| **入力検証** | 空文字列でボタン無効化、9文字でエラー、5001文字でエラー |
+| **エラーハンドリング** | API エラー表示、リトライボタン表示・動作 |
+| **状態管理** | 生成中のローディング表示、エラー後の状態リセット |
+| **UI インタラクション** | プレビューモードチェックボックス、クリップボードコピー |
+
+**Playwright テスト戦略**:
+- ヘッドレスブラウザで実行（CI 対応）
+- API バックエンドは TestWebApplicationFactory でモック化
+- 実際のブラウザレンダリングと DOM 操作を検証
+- スクリーンショット取得（失敗時）
+
+### Test Coverage Goals
+
+| メトリクス | 目標値 | 測定方法 |
+|----------|--------|---------|
+| 行カバレッジ | 80% 以上 | coverlet.collector |
+| 分岐カバレッジ | 70% 以上 | coverlet.collector |
+| E2E シナリオ | 10 シナリオ以上 | Playwright テストケース数 |
+
+### CI/CD Integration
+
+- ✅ すべてのテスト（Unit, Integration, E2E）は CI パイプラインで自動実行
+- ✅ テスト失敗時はビルド失敗（マージブロック）
+- ✅ カバレッジレポートを自動生成
+- ✅ 新機能追加時は対応するテストの同時実装を必須化
+
+### Test Implementation Order
+
+1. **Phase 1**: Core ロジックのユニットテスト（既存）
+2. **Phase 2**: API 統合テスト（既存）
+3. **Phase 3**: bUnit による Blazor コンポーネントテスト（新規実装）
+4. **Phase 4**: Playwright による E2E テスト（新規実装）
 
 ## Complexity Tracking
 
@@ -161,6 +300,11 @@ Constitution Check で違反は検出されなかったため、このセクシ�
 | タイムアウト | 固定 120 秒（自動リトライなし） | Web 制約、コスト抑制、ユーザー判断を優先 |
 | 秘匿情報管理 | User Secrets（開発）/ Key Vault（運用） | リポジトリからの分離、環境差分の吸収 |
 | プレビューモード | 文体カード含む完全プロンプト表示 | デバッグ価値の最大化、警告による安全性確保 |
+| **テスト戦略** | **3層テストピラミッド（Unit/Integration/E2E）** | **全機能の自動検証、回帰防止、品質保証** |
+| Unit テスト | NUnit + Moq（Core）、bUnit（Blazor） | コアロジックと UI ロジックの独立検証 |
+| Integration テスト | WebApplicationFactory + Moq | API エンドポイントの動作検証、外部依存モック化 |
+| E2E テスト | Playwright + NUnit | ユーザーフロー全体の検証、ブラウザ自動化 |
+| カバレッジ目標 | 行 80%、分岐 70%、E2E 10 シナリオ | 品質維持、回帰検出、継続的改善 |
 
 ### Constitution Re-Check (Post-Phase 1)
 
