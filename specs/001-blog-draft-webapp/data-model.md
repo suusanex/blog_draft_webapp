@@ -103,6 +103,27 @@ public class RAGChunk
 }
 ```
 
+#### Azure AI Search インデックス フィールドマッピング
+
+実装時は、Azure AI Search インデックスの以下のフィールドから `RAGChunk` へマッピングする：
+
+| RAGChunk Property | Azure Search Field | Type | 説明 |
+|---|---|---|---|
+| `Text` | `chunk` | `Edm.String` | チャンク本文（検索可能、保存） |
+| `Score` | （ベクトル検索スコア） | `double` | Azure AI Search が自動計算するスコア |
+| `SourceTitle` | `title_Data_Column` | `Edm.String` | 出典記事のタイトル |
+| `SourceUrl` | `metadata_storage_path` | `Edm.String` | 出典ドキュメントのパス（URL として使用） |
+
+#### $select フィールド一覧
+
+Azure AI Search のベクトル検索時、以下のフィールドを `$select` で指定する：
+
+```
+chunk, title_Data_Column, metadata_storage_path, search.score()
+```
+
+**注**: `search.score()` はスコアを取得するための特殊フィールド。Azure Search が自動的に計算する。
+
 ---
 
 ### 4. Prompt（プロンプト）
@@ -377,6 +398,30 @@ public class RagOptions
     public double MinimumScore { get; set; } = 0.7;
 }
 ```
+
+#### 設定例（実装参考）
+
+以下は実際の Azure AI Search インデックスに対応する具体的な設定値の例：
+
+```json
+{
+  "Rag": {
+    "Enabled": true,
+    "Endpoint": "https://my-search-service.search.windows.net",
+    "ApiKey": "secret-key-from-keyvault",
+    "IndexName": "rag-1763523226614-azureOpenAi",
+    "TextFieldName": "chunk",
+    "VectorFieldName": "text_vector",
+    "TopK": 5,
+    "MinimumScore": 0.7
+  }
+}
+```
+
+**重要**: 
+- `TextFieldName` は Azure AI Search インデックスの本文フィールド名（ここでは `chunk`）に統一する。アプリケーション側で `title` などのフィールドを直接指定してはならない。
+- `VectorFieldName` はベクトル検索用フィールド（ここでは `text_vector`）を指定する。
+- API 呼び出し時の `$select` には `TextFieldName` で指定したフィールドを含める（詳細は RAGChunk マッピング仕様を参照）。
 
 ---
 

@@ -47,9 +47,12 @@ public sealed class DefaultAzureSearchClientFactory : IAzureSearchClientFactory
                 Size = topK,
             };
 
+            // $select には以下のフィールドを含める：TextFieldName(本文)、出典タイトル
+            // 出典URLフィールドはインデックスで retrievable に設定されていないと
+            // ベクトル検索時の $select に含めると Azure が BadRequest を返すため、
+            // アプリ側では必須として扱わない（取得できれば SourceUrl に設定、取得不可でも動作する）。
             searchOptions.Select.Add(_options.TextFieldName);
-            searchOptions.Select.Add("title");
-            searchOptions.Select.Add("url");
+            searchOptions.Select.Add("title_Data_Column");
 
             var response = await _client.SearchAsync<SearchDocument>(query, searchOptions, cancellationToken);
 
@@ -117,8 +120,8 @@ public sealed class AzureAISearchService : IRetrievalService
                 }
 
                 text = NormalizeChunkText(text);
-                var sourceTitle = TryGetString(hit.Fields, "title");
-                var sourceUrl = TryGetString(hit.Fields, "url");
+                var sourceTitle = TryGetString(hit.Fields, "title_Data_Column");
+                var sourceUrl = TryGetString(hit.Fields, "metadata_storage_path");
 
                 var dedupeKey = !string.IsNullOrWhiteSpace(sourceUrl)
                     ? sourceUrl

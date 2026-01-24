@@ -306,6 +306,62 @@ Constitution Check で違反は検出されなかったため、このセクシ�
 | E2E テスト | Playwright + NUnit | ユーザーフロー全体の検証、ブラウザ自動化 |
 | カバレッジ目標 | 行 80%、分岐 70%、E2E 10 シナリオ | 品質維持、回帰検出、継続的改善 |
 
+## Azure AI Search インデックス仕様
+
+本アプリケーションが連携する Azure AI Search インデックスは、以下のフィールド構成を想定：
+
+### インデックスフィールド一覧
+
+| フィールド名 | 型 | 検索可能 | 取得可能 | 保存 | 用途 |
+|---|---|---|---|---|---|
+| `chunk_id` | `Edm.String` | ○ | ○ | ○ | キー（チャンク一意識別子） |
+| `parent_id` | `Edm.String` | - | ○ | ○ | 親ドキュメント ID |
+| `chunk` | `Edm.String` | ○ | ○ | ○ | **チャンク本文（RagOptions.TextFieldName）** |
+| `text_vector` | `Collection(Edm.Single)` | ○ (Vector) | ○ | ○ | **ベクトル検索用（RagOptions.VectorFieldName）** |
+| `title_Data_Column` | `Edm.String` | ○ | ○ | ○ | **出典記事タイトル（RAGChunk.SourceTitle）** |
+| `tags` | `Collection(Edm.String)` | ○ | ○ | ○ | タグ（メタデータ） |
+| `created_at` | `Edm.DateTimeOffset` | - | ○ | ○ | 作成日時 |
+| `metadata_storage_path` | `Edm.String` | ○ | ○ | ○ | **ドキュメントパス（RAGChunk.SourceUrl）** |
+| その他（メタデータ） | - | - | ○ | ○ | メタデータ（内容では使用しない） |
+
+### ベクトル検索時の $select フィールド
+
+Azure AI Search のベクトル検索結果から以下のフィールドを取得する：
+
+```
+chunk, title_Data_Column, metadata_storage_path, search.score()
+```
+
+これらが `RAGChunk` にマッピングされる：
+- `chunk` → `RAGChunk.Text`
+- `title_Data_Column` → `RAGChunk.SourceTitle`
+- `metadata_storage_path` → `RAGChunk.SourceUrl`
+- `search.score()` → `RAGChunk.Score`
+
+### RagOptions 設定値（実装例）
+
+```json
+{
+  "Rag": {
+    "Enabled": true,
+    "Endpoint": "https://<service-name>.search.windows.net",
+    "ApiKey": "<api-key-from-keyvault>",
+    "IndexName": "rag-1763523226614-azureOpenAi",
+    "TextFieldName": "chunk",
+    "VectorFieldName": "text_vector",
+    "TopK": 5,
+    "MinimumScore": 0.7
+  }
+}
+```
+
+### 実装上の注意点
+
+1. **TextFieldName の指定**: `RagOptions.TextFieldName` に `chunk` を設定し、API 呼び出し時の `$select` に含める。`title` など不正なフィールド名を指定してはならない。
+2. **$select の動的構築**: インデックスからの取得フィールドは、`RagOptions` で定義したフィールド名から動的に組み立てる（ハードコードを避ける）。
+3. **スコアの扱い**: `search.score()` は Azure AI Search が自動計算するスコア（0.0 ~ 1.0 相当）。`RagOptions.MinimumScore` で除外判定を行う。
+4. **エラー処理**: フィールドが見つからない場合（例: `$select` に存在しないフィールド）は `Azure.RequestFailedException` が発生。詳細なエラーログ（フィールド名、インデックス名、API 呼び出しパラメータ）を記録する。
+
 ### Constitution Re-Check (Post-Phase 1)
 
 全ての要件を引き続き満たしていることを確認:
