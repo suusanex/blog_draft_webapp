@@ -2,6 +2,7 @@ using Azure;
 using Azure.Search.Documents;
 using Azure.Search.Documents.Models;
 using BlogDraftWebApp.Core.Configuration;
+using BlogDraftWebApp.Core.Exceptions;
 using BlogDraftWebApp.Core.Models;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -141,8 +142,8 @@ public sealed class AzureAISearchService : IRetrievalService
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "RAG retrieval failed. Falling back to empty results.");
-            return new RetrievalResult(Array.Empty<RAGChunk>(), "関連記事の検索に失敗しました。過去記事の参照なしで生成します");
+            _logger.LogError(ex, "RAG retrieval failed and cannot continue.");
+            throw new RagException("関連記事の検索に失敗しました。", ex);
         }
     }
 

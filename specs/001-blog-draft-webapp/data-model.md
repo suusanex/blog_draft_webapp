@@ -52,7 +52,7 @@ public class BlogOverview
 
 #### Validation Rules
 
-- `Content` が空または null の場合、エラーログを出力し、デフォルトの文体カード（最小限のテンプレート）にフォールバック。
+- `Content` が空または null の場合、エラーログを出力し、アプリケーションの起動を失敗させる（フォールバックは行わない）。
 - `Content` が 10000 文字を超える場合、警告ログを出力（トークン数に注意）。
 
 #### Example
@@ -205,7 +205,7 @@ public class GenerateDraftRequest
 | `Model` | `string` | ✅ | 使用された LLM モデル ID。 |
 | `GeneratedAt` | `DateTimeOffset` | ✅ | 生成日時（UTC）。 |
 | `RagHitCount` | `int` | ✅ | RAG で取得されたチャンク数。 |
-| `Warning` | `string?` | ❌ | 警告メッセージ（例: "RAG 検索に失敗しました"）。 |
+| `Warning` | `string?` | ❌ | 警告メッセージ（例: "生成結果が短すぎます。入力内容を詳しくするか、設定を確認してください"）。 |
 
 #### Example
 
@@ -256,7 +256,7 @@ public class PreviewPromptRequest
 |----------|------|----------|-------------|
 | `Prompt` | `string` | ✅ | LLM に送信される予定のプロンプト全文（文体カード + RAG コンテキスト + ユーザー概要）。 |
 | `RagHitCount` | `int` | ✅ | RAG で取得されたチャンク数。 |
-| `Warning` | `string?` | ❌ | 警告メッセージ（例: "RAG 検索に失敗しました"）。 |
+| `Warning` | `string?` | ❌ | 警告メッセージ（将来的な拡張用途。現状は null）。 |
 
 #### Example
 
@@ -283,6 +283,7 @@ public class PreviewPromptResponse
 | `Message` | `string` | ✅ | ユーザー向けエラーメッセージ。 |
 | `Details` | `string?` | ❌ | 詳細情報（開発環境のみ含める）。 |
 | `RequestId` | `string` | ✅ | リクエスト ID（ログ追跡用）。 |
+| `IsRetryable` | `bool` | ✅ | 再試行可能なエラーかどうか。 |
 
 #### Example
 
@@ -293,6 +294,7 @@ public class ErrorResponse
     public string Message { get; set; } = string.Empty;
     public string? Details { get; set; }
     public string RequestId { get; set; } = string.Empty;
+    public bool IsRetryable { get; set; }
 }
 ```
 
@@ -304,7 +306,7 @@ public class ErrorResponse
 | `CONFIG_ERROR` | 500 | システムが正しく構成されていません。管理者に連絡してください | API キー未設定、設定不備 |
 | `LLM_TIMEOUT` | 504 | 生成に時間がかかりすぎています。もう一度お試しください | LLM API のタイムアウト |
 | `LLM_ERROR` | 502 | LLM サービスでエラーが発生しました | LLM API の 5xx エラー |
-| `RAG_ERROR` | 500 | 関連記事の検索に失敗しました | RAG 検索の失敗（フォールバックにより生成は継続） |
+| `RAG_ERROR` | 500 | 関連記事の検索に失敗しました | RAG 検索の失敗（フォールバックせず再試行可能なエラーとして返す） |
 
 ---
 
@@ -434,7 +436,7 @@ stateDiagram-v2
     ValidatingInput --> Idle: バリデーションエラー（エラーメッセージ表示）
     
     RetrievingRAG --> ComposingPrompt: RAG 成功（チャンク取得）
-    RetrievingRAG --> ComposingPrompt: RAG 失敗（警告表示、継続）
+    RetrievingRAG --> Error: RAG 失敗（RAG_ERROR を返す）
     
     ComposingPrompt --> CallingLLM: プロンプト合成完了
     CallingLLM --> DisplayingDraft: LLM 生成成功
@@ -451,7 +453,7 @@ stateDiagram-v2
 | Entity | Validation | Error Handling |
 |--------|------------|----------------|
 | BlogOverview | 10 ~ 5000 文字 | HTTP 400、エラーメッセージ表示 |
-| StyleCard | 起動時に存在確認 | エラーログ、デフォルトにフォールバック |
+| StyleCard | 起動時に存在確認 | エラーログを出力し、フォールバックなしで起動失敗 |
 | RAGChunk | スコア閾値、空チェック | 除外（ログ記録） |
 | Prompt | 各要素の存在確認 | エラーログ、生成中断 |
 | Draft | 100 文字未満で警告 | 警告メッセージ表示（生成は継続） |

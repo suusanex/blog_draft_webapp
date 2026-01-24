@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using BlogDraftWebApp.Api.Models;
+using BlogDraftWebApp.Core.Exceptions;
 using BlogDraftWebApp.Core.Models;
 using BlogDraftWebApp.Core.Services;
 using Moq;
@@ -56,5 +57,26 @@ public sealed class DraftEndpointsTests
         factory.LlmClientMock.Verify(
             x => x.GenerateAsync(It.IsAny<Prompt>(), It.IsAny<CancellationToken>()),
             Times.Never);
+    }
+
+    [Test]
+    public async Task Draft_ReturnsRagError_WhenRetrievalFails()
+    {
+        await using var factory = new TestWebApplicationFactory();
+
+        var overview = "This is a test overview (>=10 chars).";
+        factory.RetrievalServiceMock
+            .Setup(x => x.RetrieveAsync(overview, It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new RagException("関連記事の検索に失敗しました。"));
+
+        using var http = factory.CreateClient();
+
+        var response = await http.PostAsJsonAsync("/draft", new GenerateDraftRequest { Overview = overview });
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.InternalServerError));
+
+        var payload = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+        Assert.That(payload, Is.Not.Null);
+        Assert.That(payload!.ErrorCode, Is.EqualTo("RAG_ERROR"));
+        Assert.That(payload.IsRetryable, Is.True);
     }
 }

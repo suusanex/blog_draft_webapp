@@ -164,14 +164,14 @@ info: Microsoft.Hosting.Lifetime[0]
 3. LLM に送信される予定のプロンプト全文（文体カード + RAG コンテキスト + ユーザー概要）が表示されることを確認。
 4. LLM API は呼び出されない（ログで確認可能）。
 
-### 5.3 RAG フォールバックのテスト
+### 5.3 RAG 失敗時の挙動確認
 
-1. User Secrets で RAG を無効化:
+1. User Secrets で RAG のエンドポイントを誤った値に設定し、検索リクエストを失敗させる:
    ```powershell
-   dotnet user-secrets set "AzureAISearch:Enabled" "false"
+   dotnet user-secrets set "AzureAISearch:Endpoint" "https://invalid.search.windows.net"
    ```
-2. アプリを再起動し、下書きを生成。
-3. 警告メッセージ「関連記事が見つかりませんでした」が表示され、生成が継続することを確認。
+2. アプリを再起動して「下書きを生成」をクリックし、RAG 検索による生成を試行する。
+3. UI に「関連記事の検索に失敗しました」というエラーが表示され、生成は続行されず、HTTP 500（`RAG_ERROR`）のレスポンスが返ることを確認。
 
 ### 5.4 エラーハンドリングのテスト
 
@@ -274,6 +274,8 @@ dotnet user-secrets set "OpenAI:ApiKey" "YOUR_API_KEY"
    dotnet user-secrets set "AzureAISearch:ApiKey" "YOUR_KEY"
    ```
 
+   この状態では `/draft` API は HTTP 500（`RAG_ERROR`）を返し、UI に「関連記事の検索に失敗しました」が表示されるため、設定を修正して再起動後に再試行してください。
+
 ### 問題: "文体カードが読み込めない"
 
 **原因**: 文体カードのファイルパスが不正、または User Secrets に設定されていない。
@@ -284,7 +286,7 @@ dotnet user-secrets set "OpenAI:ApiKey" "YOUR_API_KEY"
    ```powershell
    dotnet user-secrets set "StyleCard:FilePath" "C:\secrets\stylecard.md"
    ```
-3. または、デフォルトの文体カードにフォールバック（ログで確認可能）。
+3. アプリケーションは起動に失敗し、ログにエラーが出力されるため、StyleCard の設定を修正して再起動する。
 
 ### 問題: タイムアウトが発生する
 

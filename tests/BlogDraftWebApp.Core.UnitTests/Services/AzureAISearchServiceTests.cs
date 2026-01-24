@@ -1,4 +1,5 @@
 using BlogDraftWebApp.Core.Configuration;
+using BlogDraftWebApp.Core.Exceptions;
 using BlogDraftWebApp.Core.Services;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -68,9 +69,6 @@ public sealed class AzureAISearchServiceTests
 
         var service = new AzureAISearchService(NullLogger<AzureAISearchService>.Instance, options, mockFactory.Object);
 
-        var result = await service.RetrieveAsync("query", CancellationToken.None);
-
-        Assert.That(result.Chunks, Is.Empty);
-        Assert.That(result.Warning, Is.Not.Null);
+        Assert.That(async () => await service.RetrieveAsync("query", CancellationToken.None), Throws.InstanceOf<RagException>());
     }
 }

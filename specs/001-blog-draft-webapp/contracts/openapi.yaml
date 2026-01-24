@@ -81,16 +81,18 @@ paths:
                     generatedAt: "2026-01-11T10:30:00Z"
                     ragHitCount: 3
                     warning: null
-                successWithWarning:
-                  summary: 生成成功（RAG 失敗）
+                shortOutputWarning:
+                  summary: 生成結果が短すぎる
                   value:
                     draft: |
                       # Azure Functions で Durable Functions を使った非同期処理
-                      ...
+                      
+                      ## 概要
+                      要点のみを簡潔に記述
                     model: gpt-4o
                     generatedAt: "2026-01-11T10:30:00Z"
-                    ragHitCount: 0
-                    warning: "関連記事の検索に失敗しました。過去記事の参照なしで生成します"
+                    ragHitCount: 1
+                    warning: "生成結果が短すぎます。入力内容を詳しくするか、設定を確認してください"
         '400':
           description: リクエストのバリデーションエラー
           content:
@@ -126,6 +128,14 @@ paths:
                     message: システムが正しく構成されていません。管理者に連絡してください
                     details: "LLM API key is not configured"
                     requestId: "req_12347"
+                ragError:
+                  summary: RAG 検索の失敗
+                  value:
+                    errorCode: RAG_ERROR
+                    message: 関連記事の検索に失敗しました
+                    details: "Azure AI Search が 503 を返却しました"
+                    requestId: "req_12350"
+                    isRetryable: true
         '502':
           description: LLM API エラー
           content:
@@ -301,9 +311,9 @@ components:
           type: string
           nullable: true
           description: |
-            警告メッセージ。RAG 検索失敗時など。
+            警告メッセージ。生成結果が 100 文字未満などの注意事項を通知。
             null の場合は警告なし。
-          example: "関連記事の検索に失敗しました。過去記事の参照なしで生成します"
+          example: "生成結果が短すぎます。入力内容を詳しくするか、設定を確認してください"
 
     PreviewPromptRequest:
       type: object
@@ -357,8 +367,7 @@ components:
           type: string
           nullable: true
           description: |
-            警告メッセージ。RAG 検索失敗時など。
-            null の場合は警告なし。
+            警告メッセージ（将来的な拡張用途）。現状は null。
           example: null
 
     ErrorResponse:
@@ -393,6 +402,10 @@ components:
           type: string
           description: リクエスト ID（ログ追跡用）。
           example: req_12345
+        isRetryable:
+          type: boolean
+          description: 再試行可能なエラーかどうか。
+          example: true
 
 tags:
   - name: Draft Generation

@@ -127,7 +127,7 @@
 
 - [ ] T054 [US1] Implement /draft POST endpoint in src/BlogDraftWebApp.Api/Endpoints/DraftEndpoints.cs calling RetrievalService → PromptComposer → LlmClient
 - [ ] T055 [US1] Add input validation to /draft endpoint (Overview null/empty/too short → 400 BadRequest with ErrorResponse)
-- [ ] T056 [US1] Add error handling to /draft endpoint (LlmException → 500/503 with IsRetryable, RagException → continue with warning)
+- [ ] T056 [US1] Add error handling to /draft endpoint (LlmException → 500/503 with IsRetryable, RagException → 500/RAG_ERROR and stop)
 - [ ] T057 [US1] Add short output warning to /draft endpoint (Draft.Content.Length < 100 → add warning message)
 - [ ] T058 [P] [US1] Implement /health GET endpoint in src/BlogDraftWebApp.Api/Endpoints/HealthEndpoints.cs returning 200 OK
 
@@ -139,7 +139,7 @@
 - [ ] T062 [P] [US1] Add test: POST /draft with 9-char Overview returns 400 BadRequest
 - [ ] T063 [P] [US1] Add test: POST /draft with 5001-char Overview returns 400 BadRequest
 - [ ] T064 [P] [US1] Add test: POST /draft with mocked LLM timeout returns 500 with IsRetryable=true
-- [ ] T065 [P] [US1] Add test: POST /draft with mocked RAG failure continues and adds warning
+- [ ] T065 [P] [US1] Add test: POST /draft with mocked RAG failure returns RAG_ERROR
 - [ ] T066 [P] [US1] Add test: POST /draft with short output (<100 chars) adds warning
 - [ ] T067 [P] [US1] Add test: GET /health returns 200 OK even with invalid config
 
