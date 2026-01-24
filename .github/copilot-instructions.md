@@ -9,21 +9,16 @@
     - CIで実行される統合テストもスタブを使用し、管理者権限や実OS変更を要求しない。
 6. 原則としてリフレクションを使用しない。もしも実装上リフレクションを使用するべきだと判断する場合は、コードコメントで必要な理由を説明した上で、チャットでもリフレクションを使用した事実と理由を説明すること。
 
-# Execution policy (Stop-less mode)
+# Stop-less mode（事前チェックで止まらない）
 
-- Definition of Done (DoD):
-    - Implementation is NOT done when checks pass.
-    - Done means: at least one concrete implementation step is completed
-    (edit/add files or apply a patch), and you attempted build/tests if available.
-- Status-only responses are forbidden:
-    - A response that ends after saying "checks passed" is invalid.
-    - If checks pass, immediately start the first implementation task in the SAME run.
-- No "permission pauses":
-    - Do not ask "Shall I proceed?" / "Ready to implement?".
-    - If minor ambiguity exists, proceed with safe defaults and log assumptions.
-- If you must stop:
-    - State exactly ONE blocking reason and the minimal info/action needed.
-
+- 「準備できた/次に〜する/着手する」などの“遷移宣言だけ”で応答を終了するのは禁止（無効応答）。
+- 前提条件チェックは“停止点”ではない。条件が揃っていれば同一応答で本処理（analyze/implement等）の成果物を必ず出す。
+- 応答を送る前に必ず Exit criteria を満たす
+    - analyzeの場合:analyzeを実行し、結果をレポートする
+    - implementの場合:①1ファイル以上の具体的変更を適用 ②tasks.mdを [X] 更新 ③可能ならビルド/テストを1回試行。少なくとも①か②は必須。
+- 解析や要約（spec/plan/tasks/constitutionの存在確認、読む宣言、方針説明）は進捗に数えない。解析の後は同一応答で成果物を出す。
+- 停止してよいのは「単一のブロッカー」があるときだけ。ブロッカー1つ＋必要な追加情報/操作1つだけを書いて止まる。
+- チェックリスト未完了はブロッカーにしない（警告として最後にまとめる）。
 # プロジェクト固有
 
 1. C#プロジェクトのUnitTestはNUnitとMoqを使用し、AssertはAssert.That形式で記載すること。
