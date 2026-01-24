@@ -33,6 +33,7 @@ public sealed class TestWebApplicationFactory : WebApplicationFactory<Program>
 
         builder.ConfigureAppConfiguration((_, config) =>
         {
+            config.Sources.Clear();
             var values = new Dictionary<string, string?>
             {
                 ["AzureAISearch:Enabled"] = "false",

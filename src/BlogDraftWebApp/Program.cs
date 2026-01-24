@@ -53,8 +53,17 @@ builder.Services.AddSingleton<IConfigurationValidator, ConfigurationValidator>()
 builder.Services.AddSingleton<IAzureSearchClientFactory, DefaultAzureSearchClientFactory>();
 builder.Services.AddScoped<IRetrievalService, AzureAISearchService>();
 builder.Services.AddScoped<IPromptComposer, PromptComposer>();
-builder.Services.AddHttpClient<OpenAiLlmClient>();
-builder.Services.AddScoped<ILlmClient>(sp => sp.GetRequiredService<OpenAiLlmClient>());
+// E2E では実LLMを呼ばずにスタブを使うため、設定で切り替える。
+var useStubLlm = builder.Configuration.GetValue<bool>("E2E:StubLlm");
+if (useStubLlm)
+{
+    builder.Services.AddScoped<ILlmClient, StubLlmClient>();
+}
+else
+{
+    builder.Services.AddHttpClient<OpenAiLlmClient>();
+    builder.Services.AddScoped<ILlmClient>(sp => sp.GetRequiredService<OpenAiLlmClient>());
+}
 
 builder.Services.AddSingleton<IValidateOptions<LlmOptions>, LlmOptionsValidator>();
 builder.Services.AddSingleton<IValidateOptions<RagOptions>, RagOptionsValidator>();
@@ -65,6 +74,8 @@ builder.Services.AddSingleton<IPostConfigureOptions<StyleCardOptions>, StyleCard
 builder.Services.AddOptions<LlmOptions>().Bind(builder.Configuration.GetSection("OpenAI"));
 builder.Services.AddOptions<RagOptions>().Bind(builder.Configuration.GetSection("AzureAISearch"));
 builder.Services.AddOptions<StyleCardOptions>().Bind(builder.Configuration.GetSection("StyleCard"));
+
+builder.Services.AddHttpClient();
 
 // StyleCard is treated as sensitive data; keep it server-side and cache it as a singleton.
 builder.Services.AddSingleton(sp =>

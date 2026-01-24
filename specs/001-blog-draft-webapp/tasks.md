@@ -34,8 +34,8 @@
 - [ ] T004 [P] Add NuGet packages to BlogDraftWebApp.csproj (Blazor Server, Markdig, Azure.Identity)
 - [ ] T005 [P] Add NuGet packages to BlogDraftWebApp.Core.UnitTests.csproj (NUnit, Moq, coverlet.collector)
 - [ ] T006 [P] Add NuGet packages to BlogDraftWebApp.Api.IntegrationTests.csproj (Microsoft.AspNetCore.Mvc.Testing, NUnit, Moq)
-- [ ] T007 Create new test project BlogDraftWebApp.Components.Tests.csproj with bunit, bunit.web, NUnit, Moq
-- [ ] T008 Create new test project BlogDraftWebApp.E2E.Tests.csproj with Microsoft.Playwright, Microsoft.Playwright.NUnit
+- [x] T007 Create new test project BlogDraftWebApp.Components.Tests.csproj with bunit, bunit.web, NUnit, Moq
+- [x] T008 Create new test project BlogDraftWebApp.E2E.Tests.csproj with Microsoft.Playwright, Microsoft.Playwright.NUnit
 - [ ] T009 [P] Install Playwright browsers via `pwsh bin/Debug/net10.0/playwright.ps1 install`
 - [ ] T010 Configure appsettings.json and appsettings.Development.json (without secrets, with placeholders)
 - [ ] T011 Setup User Secrets for local development (dotnet user-secrets init)
@@ -158,23 +158,23 @@
 
 ### Blazor UI - bUnit Tests
 
-- [ ] T078 [US1] Create GenerateDraftTests.cs in tests/BlogDraftWebApp.Components.Tests/Pages/
-- [ ] T079 [P] [US1] Setup test: Mock IHttpClientFactory, IJSRuntime, NavigationManager in test context
+- [x] T078 [US1] Create GenerateDraftTests.cs in tests/BlogDraftWebApp.Components.Tests/Pages/
+- [x] T079 [P] [US1] Setup test: Mock IHttpClientFactory, IJSRuntime, NavigationManager in test context
 - [ ] T080 [P] [US1] Test: OnOverviewChanged updates _model.Overview and triggers StateHasChanged
-- [ ] T081 [P] [US1] Test: IsGenerateDisabled returns true when Overview is empty
+- [x] T081 [P] [US1] Test: IsGenerateDisabled returns true when Overview is empty
 - [ ] T082 [P] [US1] Test: IsGenerateDisabled returns true when _isBusy is true
-- [ ] T083 [P] [US1] Test: IsGenerateDisabled returns false when Overview is valid and not busy
+- [x] T083 [P] [US1] Test: IsGenerateDisabled returns false when Overview is valid and not busy
 - [ ] T084 [P] [US1] Test: GenerateAsync sets _isBusy=true, calls HttpClient POST /draft, sets _isBusy=false
-- [ ] T085 [P] [US1] Test: GenerateAsync with 200 response updates _draftMarkdown and _draftHtml
-- [ ] T086 [P] [US1] Test: GenerateAsync with 400 response sets _error with appropriate message
-- [ ] T087 [P] [US1] Test: GenerateAsync with 500 retryable error sets _error with IsRetryable=true
+- [x] T085 [P] [US1] Test: GenerateAsync with 200 response updates _draftMarkdown and _draftHtml
+- [x] T086 [P] [US1] Test: GenerateAsync with 400 response sets _error with appropriate message
+- [x] T087 [P] [US1] Test: GenerateAsync with 500 retryable error sets _error with IsRetryable=true
 - [ ] T088 [P] [US1] Test: Markdown rendering converts markdown to HTML correctly
-- [ ] T089 [P] [US1] Test: Markdown rendering disables raw HTML (XSS protection)
+- [x] T089 [P] [US1] Test: Markdown rendering disables raw HTML (XSS protection)
 - [ ] T090 [P] [US1] Test: CopyDraftAsync calls JS interop with correct draft content
-- [ ] T091 [P] [US1] Test: CopyDraftAsync sets _copyMessage = "コピーしました"
+- [x] T091 [P] [US1] Test: CopyDraftAsync sets _copyMessage = "コピーしました"
 - [ ] T092 [P] [US1] Test: RetryAsync calls GenerateAsync again
-- [ ] T093 [P] [US1] Test: Error display shows ErrorResponse.Message when _error is not null
-- [ ] T094 [P] [US1] Test: Retry button shows only when _error.IsRetryable is true
+- [x] T093 [P] [US1] Test: Error display shows ErrorResponse.Message when _error is not null
+- [x] T094 [P] [US1] Test: Retry button shows only when _error.IsRetryable is true
 - [ ] T095 [P] [US1] Test: Warning display shows _warning message when not null
 - [ ] T096 [P] [US1] Test: Loading state shows "生成中..." when _isBusy is true
 
@@ -189,10 +189,10 @@
 
 ### E2E Tests - User Story 1
 
-- [ ] T103 [US1] Create GenerateDraftPageTests.cs in tests/BlogDraftWebApp.E2E.Tests/Pages/
+- [x] T103 [US1] Create GenerateDraftPageTests.cs in tests/BlogDraftWebApp.E2E.Tests/Pages/
 - [ ] T104 [US1] Setup: Configure Playwright browser launch (headless mode for CI)
 - [ ] T105 [US1] Setup: Create BrowserFixture.cs to manage browser lifecycle
-- [ ] T106 [P] [US1] E2E Test: Navigate to /generate, input valid overview, click generate button, verify draft displays
+- [x] T106 [P] [US1] E2E Test: Navigate to /generate, input valid overview, click generate button, verify draft displays
 - [ ] T107 [P] [US1] E2E Test: Verify copy button copies draft to clipboard (mock clipboard API)
 - [ ] T108 [P] [US1] E2E Test: Empty input disables generate button
 - [ ] T109 [P] [US1] E2E Test: Input 9 characters, submit form, verify validation error displays
@@ -248,11 +248,11 @@
 - [ ] T136 [P] [US2] Test: CopyPromptAsync calls JS interop with _promptPreview content
 - [ ] T137 [P] [US2] Test: CopyPromptAsync sets _copyPromptMessage = "コピーしました"
 - [ ] T138 [P] [US2] Test: Preview mode checkbox toggles _isPreviewMode value
-- [ ] T139 [P] [US2] Test: Warning banner displays when _promptPreview is not null
+- [x] T139 [P] [US2] Test: Warning banner displays when _promptPreview is not null
 
 ### E2E Tests - User Story 2
 
-- [ ] T140 [P] [US2] E2E Test: Navigate to /generate, check preview mode, input overview, click preview button, verify prompt displays
+- [x] T140 [P] [US2] E2E Test: Navigate to /generate, check preview mode, input overview, click preview button, verify prompt displays
 - [ ] T141 [P] [US2] E2E Test: Verify preview mode does not show draft markdown section
 - [ ] T142 [P] [US2] E2E Test: Verify warning banner "機密情報が含まれる可能性" displays in preview mode
 - [ ] T143 [P] [US2] E2E Test: Verify copy button in preview mode copies prompt to clipboard
