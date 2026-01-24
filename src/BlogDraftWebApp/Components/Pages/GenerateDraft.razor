@@ -18,7 +18,7 @@
 
     <div class="mb-3">
         <label class="form-label">記事の概要</label>
-        <InputTextArea class="form-control" @bind-Value="_model.Overview" rows="10" />
+        <InputTextArea class="form-control" Value="@_model.Overview" ValueChanged="OnOverviewChanged" ValueExpression="(() => _model.Overview)" rows="10" />
         <ValidationMessage For="() => _model.Overview" />
     </div>
 
@@ -106,6 +106,12 @@
     private ErrorResponse? _error;
 
     private bool IsGenerateDisabled => _isBusy || string.IsNullOrWhiteSpace(_model.Overview);
+
+    private void OnOverviewChanged(string value)
+    {
+        _model.Overview = value;
+        StateHasChanged();
+    }
 
     private Task SubmitAsync() => _isPreviewMode ? PreviewAsync() : GenerateAsync();
 

@@ -43,6 +43,7 @@ builder.Logging.AddConsole();
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
+
 builder.Services.AddSingleton<LlmErrorClassifier>();
 builder.Services.AddTransient<GlobalExceptionHandler>();
 

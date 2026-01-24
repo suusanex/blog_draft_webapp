@@ -10,11 +10,6 @@ public sealed class StyleCardOptionsValidator : IValidateOptions<StyleCardOption
 
         var failures = new List<string>();
 
-        if (string.IsNullOrWhiteSpace(options.SystemPrompt))
-        {
-            failures.Add("StyleCard:SystemPrompt is required.");
-        }
-
         // Content は FilePath または直接の指定のいずれかが必須
         var hasContent = !string.IsNullOrWhiteSpace(options.Content);
         var hasFilePath = !string.IsNullOrWhiteSpace(options.FilePath);

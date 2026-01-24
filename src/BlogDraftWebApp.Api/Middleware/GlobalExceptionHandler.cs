@@ -1,5 +1,4 @@
 using System.Net;
-using System.Text.Json;
 using BlogDraftWebApp.Api.Models;
 using BlogDraftWebApp.Core.Exceptions;
 using BlogDraftWebApp.Core.Services;
@@ -35,12 +34,13 @@ public sealed class GlobalExceptionHandler : IMiddleware
         {
             var requestId = context.TraceIdentifier;
             _logger.LogError(ex, "Unhandled exception. RequestId={RequestId}", requestId);
+            Console.Error.WriteLine($"Unhandled exception. RequestId={requestId}\n{ex}");
 
             var (statusCode, response) = CreateResponse(ex, requestId);
 
             context.Response.ContentType = "application/json";
             context.Response.StatusCode = statusCode;
-            await context.Response.WriteAsync(JsonSerializer.Serialize(response));
+            await context.Response.WriteAsJsonAsync(response);
         }
     }
 
@@ -87,7 +87,7 @@ public sealed class GlobalExceptionHandler : IMiddleware
         {
             ErrorCode = "INTERNAL_ERROR",
             Message = "サーバ内部エラーが発生しました",
-            Details = _hostEnvironment.IsDevelopment() ? exception.Message : null,
+            Details = null,
             RequestId = requestId,
             IsRetryable = false,
         });
