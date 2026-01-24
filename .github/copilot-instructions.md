@@ -27,3 +27,8 @@
 # プロジェクト固有
 
 1. C#プロジェクトのUnitTestはNUnitとMoqを使用し、AssertはAssert.That形式で記載すること。
+
+# 新機能追加時のテスト要件
+
+1. 新機能を追加する際は、対応するユニットテスト、統合テスト、E2Eテストを必ず作成し、すべてのテストが合格するまでその変更をマージしてはならない。詳細は `specs/001-blog-draft-webapp/spec.md` および `specs/001-blog-draft-webapp/plan.md` を参照すること。
+
