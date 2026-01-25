@@ -382,6 +382,10 @@
 
 ---
 
+## 🛠 直近の修正
+
+- [x] OpenAiLlmClient のリクエストで `max_completion_tokens` を指定するようにして OpenAI API の 400 エラーを回避
+
 ## 📊 Progress Tracking
 
 ### Completion Metrics

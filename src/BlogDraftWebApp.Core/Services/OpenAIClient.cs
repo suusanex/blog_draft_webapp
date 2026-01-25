@@ -41,7 +41,7 @@ public sealed class OpenAiLlmClient : ILlmClient
             var body = new Dictionary<string, object?>
             {
                 ["model"] = _options.Model,
-                ["max_tokens"] = _options.MaxTokens,
+                ["max_completion_tokens"] = _options.MaxTokens,
                 ["messages"] = new object[]
                 {
                     new Dictionary<string, object?> { ["role"] = "system", ["content"] = prompt.SystemMessage },
