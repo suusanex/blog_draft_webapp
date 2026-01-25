@@ -10,7 +10,7 @@ public sealed class LlmOptionsPostConfigure : IPostConfigureOptions<LlmOptions>
 
         if (options.RequestTimeoutSeconds <= 0)
         {
-            options.RequestTimeoutSeconds = 120;
+            options.RequestTimeoutSeconds = 600;
         }
     }
 }

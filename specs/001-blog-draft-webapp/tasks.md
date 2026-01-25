@@ -317,8 +317,8 @@
 
 ### Performance & Resilience
 
-- [ ] T170 [P] Add timeout handling to HttpClient in AzureAISearchService and OpenAIClient (default 120s)
-- [ ] T171 [P] Test timeout handling: mock slow HTTP response, verify timeout exception after 120s
+- [ ] T170 [P] Add timeout handling to HttpClient in AzureAISearchService and OpenAIClient (default 600s)
+- [ ] T171 [P] Test timeout handling: mock slow HTTP response, verify timeout exception after 600s
 - [ ] T172 [P] Add cancellation token propagation in all async methods
 - [ ] T173 [P] Test cancellation: cancel request mid-flight, verify operation stops gracefully
 
@@ -379,6 +379,7 @@
 - [ ] T202 Verify all TODO/FIXME comments are resolved or documented
 - [ ] T203 Perform manual smoke test: deploy to staging, test all user stories end-to-end
 - [ ] T204 Update CHANGELOG.md with all implemented features and tests
+- [x] T205 [US1] HTTP クライアントのタイムアウトを 600 秒に統一
 
 ---
 
@@ -432,7 +433,7 @@
 
 ### Performance
 
-- ✅ Draft generation completes within 120s timeout
+- ✅ Draft generation completes within 600s timeout
 - ✅ Concurrent requests (up to 10 users) handled without degradation
 
 ---

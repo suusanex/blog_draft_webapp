@@ -1,6 +1,7 @@
 using Azure.Extensions.AspNetCore.Configuration.Secrets;
 using Azure.Identity;
 using Azure.Security.KeyVault.Secrets;
+using System;
 using BlogDraftWebApp.Api.Endpoints;
 using BlogDraftWebApp.Api.Middleware;
 using BlogDraftWebApp.Components;
@@ -55,15 +56,18 @@ builder.Services.AddScoped<IRetrievalService, AzureAISearchService>();
 builder.Services.AddScoped<IPromptComposer, PromptComposer>();
 // E2E では実LLMを呼ばずにスタブを使うため、設定で切り替える。
 var useStubLlm = builder.Configuration.GetValue<bool>("E2E:StubLlm");
-if (useStubLlm)
-{
-    builder.Services.AddScoped<ILlmClient, StubLlmClient>();
-}
-else
-{
-    builder.Services.AddHttpClient<OpenAiLlmClient>();
-    builder.Services.AddScoped<ILlmClient>(sp => sp.GetRequiredService<OpenAiLlmClient>());
-}
+    if (useStubLlm)
+    {
+        builder.Services.AddScoped<ILlmClient, StubLlmClient>();
+    }
+    else
+    {
+        builder.Services.AddHttpClient<OpenAiLlmClient>(client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(600);
+        });
+        builder.Services.AddScoped<ILlmClient>(sp => sp.GetRequiredService<OpenAiLlmClient>());
+    }
 
 builder.Services.AddSingleton<IValidateOptions<LlmOptions>, LlmOptionsValidator>();
 builder.Services.AddSingleton<IValidateOptions<RagOptions>, RagOptionsValidator>();
@@ -75,7 +79,10 @@ builder.Services.AddOptions<LlmOptions>().Bind(builder.Configuration.GetSection(
 builder.Services.AddOptions<RagOptions>().Bind(builder.Configuration.GetSection("AzureAISearch"));
 builder.Services.AddOptions<StyleCardOptions>().Bind(builder.Configuration.GetSection("StyleCard"));
 
-builder.Services.AddHttpClient();
+builder.Services.AddHttpClient(string.Empty, httpClient =>
+{
+    httpClient.Timeout = TimeSpan.FromSeconds(600);
+});
 
 // StyleCard is treated as sensitive data; keep it server-side and cache it as a singleton.
 builder.Services.AddSingleton(sp =>

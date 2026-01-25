@@ -346,7 +346,7 @@ public class ErrorResponse
 | `BaseUrl` | `string` | ❌ | OpenAI デフォルト | エンドポイント URL。 |
 | `Model` | `string` | ✅ | - | モデル ID（例: "gpt-4o"）。 |
 | `MaxTokens` | `int` | ✅ | 4096 | 応答の最大トークン数。 |
-| `RequestTimeoutSeconds` | `int` | ✅ | 120 | タイムアウト時間（秒）。0 の場合は 120 を適用。 |
+| `RequestTimeoutSeconds` | `int` | ✅ | 600 | タイムアウト時間（秒）。0 の場合は 600 を適用。 |
 | `Parameters` | `Dictionary<string, string>?` | ❌ | - | 追加パラメータ（例: "reasoning_effort": "high"）。 |
 
 #### Example
@@ -359,7 +359,7 @@ public class LlmOptions
     public string? BaseUrl { get; set; }
     public string Model { get; set; } = string.Empty;
     public int MaxTokens { get; set; } = 4096;
-    public int RequestTimeoutSeconds { get; set; } = 120;
+    public int RequestTimeoutSeconds { get; set; } = 600;
     public Dictionary<string, string>? Parameters { get; set; }
 }
 ```
