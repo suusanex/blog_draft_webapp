@@ -421,3 +421,9 @@ FodyWeavers.xsd
 **/secrets.json
 **/secrets.*.json
 **/*appsettings.*.local.json
+
+# Workflow session data (LiteDB)
+**/data/
+*.db
+*.db-shm
+*.db-wal
