@@ -12,4 +12,13 @@ public interface IPromptComposer
         IReadOnlyList<RAGChunk> ragChunks,
         StyleCard styleCard,
         CancellationToken cancellationToken);
+
+    Task<Prompt> ComposeAsync(
+        WorkflowStep step,
+        BlogOverview overview,
+        IReadOnlyList<RAGChunk> ragChunks,
+        StyleCard styleCard,
+        string? outline,
+        string? draft,
+        CancellationToken cancellationToken);
 }

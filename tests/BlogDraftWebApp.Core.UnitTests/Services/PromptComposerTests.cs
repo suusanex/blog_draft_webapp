@@ -86,4 +86,56 @@ public sealed class PromptComposerTests
         Assert.That(prompt.RagContext, Is.EqualTo(string.Empty));
         Assert.That(prompt.FullPrompt, Does.Not.Contain("過去記事の作例"));
     }
+
+    [Test]
+    public async Task ComposeAsync_Step2Draft_確定アウトラインを含む()
+    {
+        var composer = new PromptComposer();
+
+        var overview = new BlogOverview("0123456789");
+        var styleCard = new StyleCard
+        {
+            SystemPrompt = "sys",
+            Content = "content",
+        };
+
+        var prompt = await composer.ComposeAsync(
+            WorkflowStep.Step2_Draft,
+            overview,
+            Array.Empty<RAGChunk>(),
+            styleCard,
+            "## 確定アウトライン\n- point",
+            null,
+            CancellationToken.None);
+
+        Assert.That(prompt.UserOverview, Does.Contain("下書き生成"));
+        Assert.That(prompt.UserOverview, Does.Contain("確定アウトライン"));
+        Assert.That(prompt.UserOverview, Does.Contain("point"));
+    }
+
+    [Test]
+    public async Task ComposeAsync_Step3TitleHook_確定下書きを含む()
+    {
+        var composer = new PromptComposer();
+
+        var overview = new BlogOverview("0123456789");
+        var styleCard = new StyleCard
+        {
+            SystemPrompt = "sys",
+            Content = "content",
+        };
+
+        var prompt = await composer.ComposeAsync(
+            WorkflowStep.Step3_TitleHook,
+            overview,
+            Array.Empty<RAGChunk>(),
+            styleCard,
+            null,
+            "# 確定下書き\n本文",
+            CancellationToken.None);
+
+        Assert.That(prompt.UserOverview, Does.Contain("タイトルと導入部生成"));
+        Assert.That(prompt.UserOverview, Does.Contain("確定下書き"));
+        Assert.That(prompt.UserOverview, Does.Contain("本文"));
+    }
 }

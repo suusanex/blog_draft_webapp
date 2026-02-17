@@ -8,13 +8,15 @@ WinUI 3 デスクトップアプリで提供していた「ブログ下書き生
 - 編集計画では中心命題、重要ポイント、観測、判断、読者前提、対象外、見出し案を確認・修正できる
 - Writer に実際に送る承認済み編集計画のプロンプトをプレビュー表示（LLM は呼び出しません）
 - 既存APIの `overview` だけの `POST /draft` は従来どおり一段生成として利用可能
+- ワークフロー型生成（アウトライン → 下書き → タイトル＆導入部）
+- セッション再開・一覧・削除（`/workflow/*`）
 - `/health` で稼働確認（設定検証はしません）
 
 ## 技術スタック
 
 - C# / .NET 10
 - Blazor Web App（Interactive Server）
-- ASP.NET Core Minimal API（/draft/plan, /draft, /draft/preview, /health）
+- ASP.NET Core Minimal API（/draft/plan, /draft, /draft/preview, /workflow/*, /health）
 
 ## クイックスタート（ローカル）
 

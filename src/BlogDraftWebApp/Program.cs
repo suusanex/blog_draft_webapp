@@ -8,6 +8,7 @@ using BlogDraftWebApp.Components;
 using BlogDraftWebApp.Core.Configuration;
 using BlogDraftWebApp.Core.Models;
 using BlogDraftWebApp.Core.Services;
+using BlogDraftWebApp.Services;
 using Microsoft.AspNetCore.Http.Json;
 using Microsoft.Extensions.Options;
 
@@ -79,6 +80,7 @@ builder.Services.AddSingleton<IPostConfigureOptions<StyleCardOptions>, StyleCard
 builder.Services.AddOptions<LlmOptions>().Bind(builder.Configuration.GetSection("OpenAI"));
 builder.Services.AddOptions<RagOptions>().Bind(builder.Configuration.GetSection("AzureAISearch"));
 builder.Services.AddOptions<StyleCardOptions>().Bind(builder.Configuration.GetSection("StyleCard"));
+builder.Services.AddOptions<WorkflowOptions>().Bind(builder.Configuration.GetSection("Workflow"));
 
 builder.Services.AddHttpClient(string.Empty, httpClient =>
 {
@@ -96,6 +98,12 @@ builder.Services.AddSingleton(sp =>
         SystemPrompt = options.SystemPrompt,
     };
 });
+
+builder.Services.AddSingleton<WorkflowSessionLock>();
+builder.Services.AddSingleton<IWorkflowRepository, LiteDbWorkflowRepository>();
+builder.Services.AddScoped<IWorkflowOrchestrator, WorkflowOrchestrator>();
+builder.Services.AddScoped<ClipboardService>();
+builder.Services.AddHostedService<SessionCleanupService>();
 
 var app = builder.Build();
 
@@ -164,6 +172,7 @@ app.MapRazorComponents<App>()
 
 app.MapHealthEndpoints();
 app.MapDraftEndpoints();
+app.MapWorkflowEndpoints();
 
 app.Run();
 

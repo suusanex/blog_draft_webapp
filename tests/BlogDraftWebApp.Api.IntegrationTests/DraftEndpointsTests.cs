@@ -340,4 +340,36 @@ public sealed class DraftEndpointsTests
         Assert.That(payload!.ErrorCode, Is.EqualTo("RAG_ERROR"));
         Assert.That(payload.IsRetryable, Is.True);
     }
+
+    [Test]
+    public async Task Draft_StillWorks_WithWorkflowEndpointsRegistered()
+    {
+        await using var factory = new TestWebApplicationFactory();
+
+        factory.RetrievalServiceMock
+            .Setup(x => x.RetrieveAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new RetrievalResult(new List<RAGChunk>(), null));
+
+        factory.LlmClientMock
+            .Setup(x => x.GenerateAsync(It.IsAny<Prompt>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Draft { Content = "single-shot", Model = "test", GeneratedAt = DateTimeOffset.UtcNow });
+
+        using var http = factory.CreateClient();
+
+        var sessionResponse = await http.PostAsJsonAsync("/workflow/sessions", new CreateSessionRequest
+        {
+            Overview = "0123456789",
+        });
+        Assert.That(sessionResponse.StatusCode, Is.EqualTo(HttpStatusCode.Created));
+
+        var draftResponse = await http.PostAsJsonAsync("/draft", new GenerateDraftRequest
+        {
+            Overview = "This is a test overview (>=10 chars).",
+        });
+
+        Assert.That(draftResponse.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        var payload = await draftResponse.Content.ReadFromJsonAsync<GenerateDraftResponse>();
+        Assert.That(payload, Is.Not.Null);
+        Assert.That(payload!.Draft, Is.EqualTo("single-shot"));
+    }
 }
