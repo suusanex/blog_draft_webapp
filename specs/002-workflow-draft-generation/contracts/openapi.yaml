@@ -1,0 +1,130 @@
+openapi: 3.0.3
+info:
+  title: Workflow API
+  version: 0.1.0
+paths:
+  /workflow/sessions:
+    post:
+      summary: Create workflow session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                overview:
+                  type: string
+              required: [overview]
+      responses:
+        '201':
+          description: Created
+    get:
+      summary: List workflow sessions
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: integer
+        - in: query
+          name: pageSize
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: OK
+  /workflow/sessions/{sessionId}:
+    get:
+      summary: Get workflow session
+      parameters:
+        - in: path
+          name: sessionId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+    delete:
+      summary: Delete workflow session
+      parameters:
+        - in: path
+          name: sessionId
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: No Content
+  /workflow/sessions/{sessionId}/steps/outline/generate:
+    post:
+      summary: Generate outline
+      responses:
+        '200':
+          description: OK
+  /workflow/sessions/{sessionId}/steps/outline/preview:
+    post:
+      summary: Preview outline prompt
+      responses:
+        '200':
+          description: OK
+  /workflow/sessions/{sessionId}/steps/outline/save:
+    post:
+      summary: Save outline
+      responses:
+        '200':
+          description: OK
+  /workflow/sessions/{sessionId}/steps/outline/confirm:
+    post:
+      summary: Confirm outline
+      responses:
+        '200':
+          description: OK
+  /workflow/sessions/{sessionId}/steps/draft/generate:
+    post:
+      summary: Generate draft
+      responses:
+        '200':
+          description: OK
+  /workflow/sessions/{sessionId}/steps/draft/preview:
+    post:
+      summary: Preview draft prompt
+      responses:
+        '200':
+          description: OK
+  /workflow/sessions/{sessionId}/steps/draft/save:
+    post:
+      summary: Save draft
+      responses:
+        '200':
+          description: OK
+  /workflow/sessions/{sessionId}/steps/draft/confirm:
+    post:
+      summary: Confirm draft
+      responses:
+        '200':
+          description: OK
+  /workflow/sessions/{sessionId}/steps/titlehook/generate:
+    post:
+      summary: Generate title and hook options
+      responses:
+        '200':
+          description: OK
+  /workflow/sessions/{sessionId}/steps/titlehook/preview:
+    post:
+      summary: Preview title and hook prompt
+      responses:
+        '200':
+          description: OK
+  /workflow/sessions/{sessionId}/steps/titlehook/save:
+    post:
+      summary: Save title and hook
+      responses:
+        '200':
+          description: OK
+  /workflow/sessions/{sessionId}/steps/titlehook/confirm:
+    post:
+      summary: Confirm title and hook
+      responses:
+        '200':
+          description: OK

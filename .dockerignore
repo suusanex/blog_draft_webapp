@@ -4,7 +4,10 @@
 **/.vscode/
 **/.idea/
 **/.git/
+**/data/
 **/.gitignore
+**/.dockerignore
+**/Dockerfile*
 **/*.user
 **/*.suo
 **/*.log
@@ -13,6 +16,10 @@
 **/*.trx
 **/*.coverage
 **/*.coveragexml
+**/coverage/
 **/artifacts/
 **/node_modules/
 **/.env*
+**/*.db
+**/*.db-shm
+**/*.db-wal

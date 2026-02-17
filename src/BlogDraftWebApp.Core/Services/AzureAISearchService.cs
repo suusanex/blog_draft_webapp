@@ -120,8 +120,8 @@ public sealed class AzureAISearchService : IRetrievalService
                 }
 
                 text = NormalizeChunkText(text);
-                var sourceTitle = TryGetString(hit.Fields, "title_Data_Column");
-                var sourceUrl = TryGetString(hit.Fields, "metadata_storage_path");
+                var sourceTitle = TryGetFirstString(hit.Fields, "title_Data_Column", "title");
+                var sourceUrl = TryGetFirstString(hit.Fields, "metadata_storage_path", "url", "sourceUrl");
 
                 var dedupeKey = !string.IsNullOrWhiteSpace(sourceUrl)
                     ? sourceUrl
@@ -166,6 +166,20 @@ public sealed class AzureAISearchService : IRetrievalService
         if (fields.TryGetValue(key, out var value) && value is not null)
         {
             return value.ToString();
+        }
+
+        return null;
+    }
+
+    private static string? TryGetFirstString(IReadOnlyDictionary<string, object?> fields, params string[] keys)
+    {
+        foreach (var key in keys)
+        {
+            var value = TryGetString(fields, key);
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                return value;
+            }
         }
 
         return null;

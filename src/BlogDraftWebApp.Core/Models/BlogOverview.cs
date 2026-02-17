@@ -2,12 +2,16 @@ namespace BlogDraftWebApp.Core.Models;
 
 public sealed class BlogOverview
 {
+    public BlogOverview()
+    {
+    }
+
     public BlogOverview(string content)
     {
         Content = content ?? string.Empty;
     }
 
-    public string Content { get; }
+    public string Content { get; private set; } = string.Empty;
 
     public void Validate()
     {

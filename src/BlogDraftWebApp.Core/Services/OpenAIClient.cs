@@ -11,6 +11,8 @@ namespace BlogDraftWebApp.Core.Services;
 
 public sealed class OpenAiLlmClient : ILlmClient
 {
+    private const int WorkflowMaxTimeoutSeconds = 60;
+
     private readonly HttpClient _httpClient;
     private readonly ILogger<OpenAiLlmClient> _logger;
     private readonly LlmOptions _options;
@@ -24,7 +26,10 @@ public sealed class OpenAiLlmClient : ILlmClient
 
     public async Task<Draft> GenerateAsync(Prompt prompt, CancellationToken cancellationToken)
     {
-            var timeoutSeconds = _options.RequestTimeoutSeconds <= 0 ? 600 : _options.RequestTimeoutSeconds;
+        var configuredSeconds = _options.RequestTimeoutSeconds <= 0
+            ? WorkflowMaxTimeoutSeconds
+            : _options.RequestTimeoutSeconds;
+        var timeoutSeconds = Math.Min(configuredSeconds, WorkflowMaxTimeoutSeconds);
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         cts.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds));
 

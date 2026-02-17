@@ -6,13 +6,15 @@ WinUI 3 デスクトップアプリで提供していた「ブログ下書き生
 
 - 記事の概要を入力して Markdown の下書きを生成（RAG + 文体カード + LLM）
 - 「プレビューモード」で LLM に送るプロンプト全文を表示（LLM は呼び出しません）
+- ワークフロー型生成（アウトライン → 下書き → タイトル＆導入部）
+- セッション再開・一覧・削除（`/workflow/*`）
 - `/health` で稼働確認（設定検証はしません）
 
 ## 技術スタック
 
 - C# / .NET 10
 - Blazor Web App（Interactive Server）
-- ASP.NET Core Minimal API（/draft, /draft/preview, /health）
+- ASP.NET Core Minimal API（/draft, /draft/preview, /workflow/*, /health）
 
 ## クイックスタート（ローカル）
 

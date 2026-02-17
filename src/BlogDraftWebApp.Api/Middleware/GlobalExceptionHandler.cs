@@ -83,6 +83,58 @@ public sealed class GlobalExceptionHandler : IMiddleware
             });
         }
 
+        if (exception is InvalidStateTransitionException)
+        {
+            return (StatusCodes.Status400BadRequest, new ErrorResponse
+            {
+                ErrorCode = "INVALID_STEP_TRANSITION",
+                Message = exception.Message,
+                Details = _hostEnvironment.IsDevelopment() ? exception.Message : null,
+                RequestId = requestId,
+                IsRetryable = false,
+            });
+        }
+
+        if (exception is SessionNotFoundException sessionNotFound)
+        {
+            var status = sessionNotFound.IsExpired ? StatusCodes.Status410Gone : StatusCodes.Status404NotFound;
+            var code = sessionNotFound.IsExpired ? "SESSION_EXPIRED" : "SESSION_NOT_FOUND";
+            var message = sessionNotFound.IsExpired ? "セッションの有効期限が切れています" : "セッションが見つかりません";
+
+            return (status, new ErrorResponse
+            {
+                ErrorCode = code,
+                Message = message,
+                Details = _hostEnvironment.IsDevelopment() ? exception.Message : null,
+                RequestId = requestId,
+                IsRetryable = false,
+            });
+        }
+
+        if (exception is SessionBusyException)
+        {
+            return (StatusCodes.Status409Conflict, new ErrorResponse
+            {
+                ErrorCode = "SESSION_BUSY",
+                Message = "生成中です。しばらくお待ちください",
+                Details = _hostEnvironment.IsDevelopment() ? exception.Message : null,
+                RequestId = requestId,
+                IsRetryable = true,
+            });
+        }
+
+        if (exception is WorkflowStorageException)
+        {
+            return (StatusCodes.Status500InternalServerError, new ErrorResponse
+            {
+                ErrorCode = "STORAGE_ERROR",
+                Message = "セッションの保存に失敗しました",
+                Details = _hostEnvironment.IsDevelopment() ? exception.Message : null,
+                RequestId = requestId,
+                IsRetryable = true,
+            });
+        }
+
         return (StatusCodes.Status500InternalServerError, new ErrorResponse
         {
             ErrorCode = "INTERNAL_ERROR",

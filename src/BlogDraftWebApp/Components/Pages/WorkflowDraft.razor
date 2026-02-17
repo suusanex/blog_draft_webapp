@@ -1,0 +1,370 @@
+@page "/workflow/draft/{SessionId}"
+
+@using System.Net
+@using System.Net.Http.Json
+@using BlogDraftWebApp.Api.Models
+@inject IHttpClientFactory HttpClientFactory
+@inject NavigationManager Nav
+
+<PageTitle>ワークフロー生成（下書き）</PageTitle>
+
+<h1>ワークフロー生成（下書き）</h1>
+
+@if (string.IsNullOrWhiteSpace(SessionId))
+{
+    <div class="alert alert-warning">セッションIDが指定されていません</div>
+}
+else
+{
+    <div class="mb-3">
+        <div>セッションID: @SessionId</div>
+        <div>現在のステップ: @_currentStep</div>
+    </div>
+
+    <div class="mb-3 d-flex gap-2">
+        <button class="btn btn-primary" disabled="@_isBusy" @onclick="GenerateDraftAsync">@(_isBusy ? "生成中..." : "下書きを生成")</button>
+        <button class="btn btn-outline-secondary" disabled="@_isBusy" @onclick="PreviewDraftAsync">プロンプトをプレビュー</button>
+        <button class="btn btn-outline-warning" disabled="@_isBusy" @onclick="RefreshRagAsync">RAG再検索</button>
+        <button class="btn btn-secondary" disabled="@_isBusy || string.IsNullOrWhiteSpace(_draftContent)" @onclick="SaveDraftAsync">保存</button>
+        <button class="btn btn-success" disabled="@_isBusy || string.IsNullOrWhiteSpace(_draftContent)" @onclick="ConfirmDraftAsync">確定</button>
+        @if (_currentStep is "Step3_TitleHook" or "Completed")
+        {
+            <button class="btn btn-outline-primary" disabled="@_isBusy" @onclick="NavigateToTitle">タイトルへ進む</button>
+        }
+    </div>
+
+    @if (_refreshDiff is not null)
+    {
+        <div class="alert alert-info">
+            <div>RAG差分: +@_refreshDiff.AddedChunkCount / -@_refreshDiff.RemovedChunkCount (rate=@_refreshDiff.ChangeRate)</div>
+            <button class="btn btn-sm btn-primary mt-2" disabled="@_isBusy" @onclick="ConfirmRagRefreshAsync">この差分を採用</button>
+        </div>
+    }
+
+    <div class="mb-3">
+        <label class="form-label">下書き</label>
+        <InputTextArea class="form-control" Value="@_draftContent" ValueChanged="OnDraftChanged" ValueExpression="(() => _draftContent)" rows="16" />
+    </div>
+}
+
+@if (!string.IsNullOrWhiteSpace(_promptPreview))
+{
+    <div class="alert alert-warning mt-3">⚠️ この内容は機微情報を含みます。共有しないでください。</div>
+    <h2 class="mt-3">LLM 入力内容（プレビュー）</h2>
+    <pre class="border p-3" style="white-space: pre-wrap;">@_promptPreview</pre>
+}
+
+@if (!string.IsNullOrWhiteSpace(_warning))
+{
+    <div class="alert alert-warning mt-3">@_warning</div>
+}
+
+@if (_error is not null)
+{
+    <div class="alert alert-danger mt-3">
+        <div>@_error.Message</div>
+        @if (_error.IsRetryable)
+        {
+            <button class="btn btn-outline-danger mt-2" @onclick="GenerateDraftAsync">再試行</button>
+        }
+    </div>
+}
+
+@code {
+    [Parameter]
+    public string? SessionId { get; set; }
+
+    private string _currentStep = "Step2_Draft";
+    private string _draftContent = string.Empty;
+    private string? _promptPreview;
+    private RefreshRagSnapshotResponse? _refreshDiff;
+    private string? _warning;
+    private ErrorResponse? _error;
+    private bool _isBusy;
+    private CancellationTokenSource? _autoSaveCts;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await LoadSessionAsync();
+    }
+
+    private void OnDraftChanged(string value)
+    {
+        _draftContent = value;
+        ScheduleAutoSave();
+    }
+
+    private async Task LoadSessionAsync()
+    {
+        if (string.IsNullOrWhiteSpace(SessionId))
+        {
+            return;
+        }
+
+        _isBusy = true;
+        _error = null;
+
+        try
+        {
+            var http = CreateHttpClient();
+            var response = await http.GetAsync($"/workflow/sessions/{SessionId}");
+            if (response.StatusCode == HttpStatusCode.OK)
+            {
+                var payload = await response.Content.ReadFromJsonAsync<GetSessionResponse>();
+                if (payload is not null)
+                {
+                    _currentStep = payload.CurrentStep;
+                    _draftContent = payload.DraftEdited
+                        ?? payload.DraftGenerated
+                        ?? payload.DraftConfirmed
+                        ?? string.Empty;
+                    return;
+                }
+            }
+
+            _error = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+            _error ??= new ErrorResponse { Message = "セッションの読み込みに失敗しました", IsRetryable = false };
+        }
+        finally
+        {
+            _isBusy = false;
+        }
+    }
+
+    private async Task GenerateDraftAsync()
+    {
+        if (string.IsNullOrWhiteSpace(SessionId))
+        {
+            return;
+        }
+
+        _isBusy = true;
+        _error = null;
+        _warning = null;
+        _promptPreview = null;
+
+        try
+        {
+            var http = CreateHttpClient();
+            var response = await http.PostAsJsonAsync($"/workflow/sessions/{SessionId}/steps/draft/generate", new GenerateStepRequest { Regenerate = false });
+            if (response.StatusCode == HttpStatusCode.OK)
+            {
+                var payload = await response.Content.ReadFromJsonAsync<GenerateStepResponse>();
+                if (payload is not null)
+                {
+                    _draftContent = payload.Generated;
+                    _warning = payload.Warning;
+                    return;
+                }
+            }
+
+            _error = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+            _error ??= new ErrorResponse { Message = "下書き生成に失敗しました", IsRetryable = false };
+        }
+        finally
+        {
+            _isBusy = false;
+        }
+    }
+
+    private async Task PreviewDraftAsync()
+    {
+        if (string.IsNullOrWhiteSpace(SessionId))
+        {
+            return;
+        }
+
+        _isBusy = true;
+        _error = null;
+        _warning = null;
+        _promptPreview = null;
+
+        try
+        {
+            var http = CreateHttpClient();
+            var response = await http.PostAsync($"/workflow/sessions/{SessionId}/steps/draft/preview", content: null);
+            if (response.StatusCode == HttpStatusCode.OK)
+            {
+                var payload = await response.Content.ReadFromJsonAsync<PreviewPromptResponse>();
+                _promptPreview = payload?.Prompt;
+                _warning = payload?.Warning;
+                return;
+            }
+
+            _error = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+            _error ??= new ErrorResponse { Message = "プレビュー取得に失敗しました", IsRetryable = false };
+        }
+        finally
+        {
+            _isBusy = false;
+        }
+    }
+
+    private async Task SaveDraftAsync()
+    {
+        if (string.IsNullOrWhiteSpace(SessionId))
+        {
+            return;
+        }
+
+        _isBusy = true;
+        _error = null;
+
+        try
+        {
+            var http = CreateHttpClient();
+            var response = await http.PostAsJsonAsync($"/workflow/sessions/{SessionId}/steps/draft/save", new SaveStepRequest
+            {
+                EditedContent = _draftContent,
+            });
+
+            if (response.StatusCode == HttpStatusCode.OK)
+            {
+                return;
+            }
+
+            _error = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+            _error ??= new ErrorResponse { Message = "保存に失敗しました", IsRetryable = false };
+        }
+        finally
+        {
+            _isBusy = false;
+        }
+    }
+
+    private async Task ConfirmDraftAsync()
+    {
+        if (string.IsNullOrWhiteSpace(SessionId))
+        {
+            return;
+        }
+
+        _isBusy = true;
+        _error = null;
+
+        try
+        {
+            var http = CreateHttpClient();
+            var response = await http.PostAsJsonAsync($"/workflow/sessions/{SessionId}/steps/draft/confirm", new ConfirmStepRequest
+            {
+                ConfirmedContent = _draftContent,
+            });
+
+            if (response.StatusCode == HttpStatusCode.OK)
+            {
+                _currentStep = "Step3_TitleHook";
+                Nav.NavigateTo($"/workflow/title/{SessionId}");
+                return;
+            }
+
+            _error = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+            _error ??= new ErrorResponse { Message = "確定に失敗しました", IsRetryable = false };
+        }
+        finally
+        {
+            _isBusy = false;
+        }
+    }
+
+    private async Task RefreshRagAsync()
+    {
+        if (string.IsNullOrWhiteSpace(SessionId))
+        {
+            return;
+        }
+
+        _isBusy = true;
+        _error = null;
+
+        try
+        {
+            var http = CreateHttpClient();
+            var response = await http.PostAsync($"/workflow/sessions/{SessionId}/rag/refresh", content: null);
+            if (response.StatusCode == HttpStatusCode.OK)
+            {
+                _refreshDiff = await response.Content.ReadFromJsonAsync<RefreshRagSnapshotResponse>();
+                return;
+            }
+
+            _error = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+            _error ??= new ErrorResponse { Message = "RAG再検索に失敗しました", IsRetryable = false };
+        }
+        finally
+        {
+            _isBusy = false;
+        }
+    }
+
+    private async Task ConfirmRagRefreshAsync()
+    {
+        if (string.IsNullOrWhiteSpace(SessionId))
+        {
+            return;
+        }
+
+        _isBusy = true;
+        _error = null;
+
+        try
+        {
+            var http = CreateHttpClient();
+            var response = await http.PostAsync($"/workflow/sessions/{SessionId}/rag/refresh/confirm", content: null);
+            if (response.StatusCode == HttpStatusCode.OK)
+            {
+                _refreshDiff = null;
+                return;
+            }
+
+            _error = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+            _error ??= new ErrorResponse { Message = "RAG再検索確定に失敗しました", IsRetryable = false };
+        }
+        finally
+        {
+            _isBusy = false;
+        }
+    }
+
+    private void NavigateToTitle()
+    {
+        if (string.IsNullOrWhiteSpace(SessionId))
+        {
+            return;
+        }
+
+        Nav.NavigateTo($"/workflow/title/{SessionId}");
+    }
+
+    private void ScheduleAutoSave()
+    {
+        if (string.IsNullOrWhiteSpace(SessionId))
+        {
+            return;
+        }
+
+        _autoSaveCts?.Cancel();
+        var cts = new CancellationTokenSource();
+        _autoSaveCts = cts;
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(800), cts.Token);
+                if (!cts.Token.IsCancellationRequested)
+                {
+                    await InvokeAsync(SaveDraftAsync);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+            }
+        });
+    }
+
+    private HttpClient CreateHttpClient()
+    {
+        var http = HttpClientFactory.CreateClient();
+        http.BaseAddress = new Uri(Nav.BaseUri);
+        return http;
+    }
+}

@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
+using BlogDraftWebApp.Api.IntegrationTests.TestFixtures;
 
 namespace BlogDraftWebApp.Api.IntegrationTests;
 
@@ -37,6 +38,9 @@ public sealed class TestWebApplicationFactory : WebApplicationFactory<Program>
             var values = new Dictionary<string, string?>
             {
                 ["AzureAISearch:Enabled"] = "false",
+                ["Workflow:DatabasePath"] = "./data/test-workflow.db",
+                ["Workflow:SessionRetentionDays"] = "30",
+                ["Workflow:CleanupSchedule"] = "0 2 * * *",
             };
 
             if (_includeValidConfiguration)
@@ -56,6 +60,8 @@ public sealed class TestWebApplicationFactory : WebApplicationFactory<Program>
             // Replace external dependencies with mocks.
             services.AddSingleton(LlmClientMock.Object);
             services.AddSingleton(RetrievalServiceMock.Object);
+
+            services.AddSingleton<IWorkflowRepository, InMemoryWorkflowRepository>();
 
             // Also register StyleCard as singleton for tests if production code uses it.
             services.AddSingleton(StyleCard);

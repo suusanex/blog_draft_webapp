@@ -9,6 +9,6 @@ public sealed class LlmOptions
     public string? BaseUrl { get; set; }
     public string Model { get; set; } = string.Empty;
     public int MaxTokens { get; set; } = 4096;
-    public int RequestTimeoutSeconds { get; set; } = 600;
+    public int RequestTimeoutSeconds { get; set; } = 60;
     public Dictionary<string, string> Parameters { get; set; } = new();
 }
