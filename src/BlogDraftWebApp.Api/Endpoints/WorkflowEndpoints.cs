@@ -1,10 +1,12 @@
 using BlogDraftWebApp.Api.Models;
+using BlogDraftWebApp.Core.Configuration;
 using BlogDraftWebApp.Core.Models;
 using BlogDraftWebApp.Core.Services;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
 
 namespace BlogDraftWebApp.Api.Endpoints;
 
@@ -140,6 +142,7 @@ public static class WorkflowEndpoints
             string sessionId,
             GenerateStepRequest request,
             IWorkflowOrchestrator orchestrator,
+            IOptions<WorkflowOptions> options,
             HttpContext httpContext,
             CancellationToken cancellationToken) =>
         {
@@ -158,6 +161,7 @@ public static class WorkflowEndpoints
                 Model = result.Model,
                 GeneratedAt = result.GeneratedAt,
                 Warning = result.Warning,
+                OutlineMaxOutputTokens = options.Value.OutlineMaxOutputTokens,
             });
         });
 
@@ -402,7 +406,7 @@ public static class WorkflowEndpoints
             WorkflowStep.Step2_Draft => "draft",
             WorkflowStep.Step3_TitleHook => "titlehook",
             WorkflowStep.Completed => "completed",
-            _ => step.ToString().ToLowerInvariant(),
+            _ => step.Value.ToString().ToLowerInvariant(),
         };
     }
 
@@ -456,30 +460,6 @@ public static class WorkflowEndpoints
                 ErrorCode = "INVALID_REQUEST",
                 Message = "アウトラインを入力してください",
                 Details = env.IsDevelopment() ? "Outline field is required" : null,
-                RequestId = httpContext.TraceIdentifier,
-                IsRetryable = false,
-            });
-        }
-
-        if (outline.Length < 50)
-        {
-            return Results.BadRequest(new ErrorResponse
-            {
-                ErrorCode = "INVALID_REQUEST",
-                Message = "アウトラインは 50 文字以上入力してください",
-                Details = env.IsDevelopment() ? "Outline must be at least 50 characters" : null,
-                RequestId = httpContext.TraceIdentifier,
-                IsRetryable = false,
-            });
-        }
-
-        if (outline.Length > 5000)
-        {
-            return Results.BadRequest(new ErrorResponse
-            {
-                ErrorCode = "INVALID_REQUEST",
-                Message = "アウトラインは 5000 文字以内で入力してください",
-                Details = env.IsDevelopment() ? "Outline must be at most 5000 characters" : null,
                 RequestId = httpContext.TraceIdentifier,
                 IsRetryable = false,
             });

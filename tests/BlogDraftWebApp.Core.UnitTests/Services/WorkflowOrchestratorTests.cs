@@ -97,14 +97,71 @@ public sealed class WorkflowOrchestratorTests
             .ReturnsAsync(new Prompt { UserOverview = "prompt" });
 
         llmMock
-            .Setup(x => x.GenerateAsync(It.IsAny<Prompt>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new Draft { Content = "outline", Model = "m1", GeneratedAt = DateTimeOffset.UtcNow });
+            .Setup(x => x.GenerateAsync(It.IsAny<Prompt>(), It.IsAny<CancellationToken>(), It.IsAny<int?>()))
+            .ReturnsAsync(new Draft
+            {
+                Content = "- 背景\n  - 課題\n- 目的\n  - 対象読者\n- 結論",
+                Model = "m1",
+                GeneratedAt = DateTimeOffset.UtcNow,
+            });
 
         var result = await orchestrator.GenerateStepAsync(session.SessionId, WorkflowStep.Step1_Outline, false, CancellationToken.None);
 
-        Assert.That(result.Content, Is.EqualTo("outline"));
+        Assert.That(result.Content, Is.EqualTo("- 背景\n  - 課題\n- 目的\n  - 対象読者\n- 結論"));
         Assert.That(result.Model, Is.EqualTo("m1"));
-        Assert.That(repository.Sessions[session.SessionId].OutlineGenerated, Is.EqualTo("outline"));
+        Assert.That(repository.Sessions[session.SessionId].OutlineGenerated, Is.EqualTo("- 背景\n  - 課題\n- 目的\n  - 対象読者\n- 結論"));
+    }
+
+    [Test]
+    public async Task GenerateStepAsync_Outline違反時_OutlineConstraintViolationExceptionを投げる()
+    {
+        var repository = new InMemoryWorkflowRepository();
+        var lockService = new WorkflowSessionLock();
+        var llmMock = new Mock<ILlmClient>();
+        var retrievalMock = new Mock<IRetrievalService>();
+        var composerMock = new Mock<IPromptComposer>();
+
+        var orchestrator = CreateOrchestrator(repository, lockService, llmMock, retrievalMock, composerMock);
+
+        var session = new WorkflowSession
+        {
+            SessionId = "invalid-outline",
+            InitialInput = new BlogOverview("0123456789"),
+            CreatedAt = DateTimeOffset.UtcNow,
+            LastAccessedAt = DateTimeOffset.UtcNow,
+            DeleteAt = DateTimeOffset.UtcNow.AddDays(1),
+        };
+
+        await repository.CreateSessionAsync(session, CancellationToken.None);
+
+        retrievalMock
+            .Setup(x => x.RetrieveAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new RetrievalResult(new List<RAGChunk>(), null));
+
+        composerMock
+            .Setup(x => x.ComposeAsync(
+                WorkflowStep.Step1_Outline,
+                It.IsAny<BlogOverview>(),
+                It.IsAny<IReadOnlyList<RAGChunk>>(),
+                It.IsAny<StyleCard>(),
+                It.IsAny<string?>(),
+                It.IsAny<string?>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Prompt { UserOverview = "prompt" });
+
+        llmMock
+            .Setup(x => x.GenerateAsync(It.IsAny<Prompt>(), It.IsAny<CancellationToken>(), It.IsAny<int?>()))
+            .ReturnsAsync(new Draft
+            {
+                Content = "# invalid heading",
+                Model = "m1",
+                GeneratedAt = DateTimeOffset.UtcNow,
+            });
+
+        var ex = Assert.ThrowsAsync<OutlineConstraintViolationException>(() =>
+            orchestrator.GenerateStepAsync(session.SessionId, WorkflowStep.Step1_Outline, false, CancellationToken.None));
+
+        Assert.That(ex, Is.Not.Null);
     }
 
     private static WorkflowOrchestrator CreateOrchestrator(
@@ -123,6 +180,7 @@ public sealed class WorkflowOrchestratorTests
         var llm = llmMock?.Object ?? new Mock<ILlmClient>().Object;
         var retrieval = retrievalMock?.Object ?? new Mock<IRetrievalService>().Object;
         var composer = composerMock?.Object ?? new Mock<IPromptComposer>().Object;
+        var outlineValidator = new OutlineValidator();
         var styleCard = new StyleCard { Title = "t", Content = "c", SystemPrompt = "s" };
 
         return new WorkflowOrchestrator(
@@ -130,6 +188,7 @@ public sealed class WorkflowOrchestratorTests
             retrieval,
             composer,
             llm,
+            outlineValidator,
             styleCard,
             lockService,
             options,

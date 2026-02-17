@@ -24,7 +24,7 @@ public sealed class OpenAiLlmClient : ILlmClient
         _options = options.Value;
     }
 
-    public async Task<Draft> GenerateAsync(Prompt prompt, CancellationToken cancellationToken)
+    public async Task<Draft> GenerateAsync(Prompt prompt, CancellationToken cancellationToken, int? maxOutputTokens = null)
     {
         var configuredSeconds = _options.RequestTimeoutSeconds <= 0
             ? WorkflowMaxTimeoutSeconds
@@ -46,7 +46,7 @@ public sealed class OpenAiLlmClient : ILlmClient
             var body = new Dictionary<string, object?>
             {
                 ["model"] = _options.Model,
-                ["max_completion_tokens"] = _options.MaxTokens,
+                ["max_completion_tokens"] = maxOutputTokens is > 0 ? maxOutputTokens.Value : _options.MaxTokens,
                 ["messages"] = new object[]
                 {
                     new Dictionary<string, object?> { ["role"] = "system", ["content"] = prompt.SystemMessage },

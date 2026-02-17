@@ -95,6 +95,18 @@ public sealed class GlobalExceptionHandler : IMiddleware
             });
         }
 
+        if (exception is OutlineConstraintViolationException)
+        {
+            return (StatusCodes.Status400BadRequest, new ErrorResponse
+            {
+                ErrorCode = "OUTLINE_CONSTRAINT_VIOLATION",
+                Message = "アウトラインが長すぎるか形式が不正です",
+                Details = _hostEnvironment.IsDevelopment() ? exception.Message : null,
+                RequestId = requestId,
+                IsRetryable = false,
+            });
+        }
+
         if (exception is SessionNotFoundException sessionNotFound)
         {
             var status = sessionNotFound.IsExpired ? StatusCodes.Status410Gone : StatusCodes.Status404NotFound;

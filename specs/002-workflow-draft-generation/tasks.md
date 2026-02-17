@@ -59,17 +59,27 @@
 
 ### プロンプト合成拡張
 
-- [x] T013 Extend PromptComposer to support step-specific instructions in src/BlogDraftWebApp.Core/Services/PromptComposer.cs
+- [x] T013 Extend PromptComposer to support step-specific instructions with Step1 strict template (禁止事項・上限明文化) in src/BlogDraftWebApp.Core/Services/PromptComposer.cs
 
 ### 設定
 
-- [x] T014 [P] Create WorkflowOptions configuration model in src/BlogDraftWebApp.Core/Configuration/WorkflowOptions.cs
-- [x] T015 [P] Add workflow settings to appsettings.json (DatabasePath, SessionRetentionDays, CleanupSchedule)
+- [x] T014 [P] Create WorkflowOptions configuration model with outline constraint settings (OutlineMinLines, OutlineMaxLines, OutlineMaxDepth, OutlineMaxLineLength, OutlineMaxTotalChars, OutlineMaxOutputTokens) in src/BlogDraftWebApp.Core/Configuration/WorkflowOptions.cs
+- [x] T015 [P] Add workflow settings to appsettings.json with outline constraint defaults (MinLines: 5, MaxLines: 15, MaxDepth: 2, MaxLineLength: 120, MaxTotalChars: 2000, MaxOutputTokens: 350)
 
 ### 例外
 
 - [x] T016 [P] Create InvalidStateTransitionException in src/BlogDraftWebApp.Core/Exceptions/InvalidStateTransitionException.cs
 - [x] T017 [P] Create SessionNotFoundException in src/BlogDraftWebApp.Core/Exceptions/SessionNotFoundException.cs
+
+### アウトライン短文化・検証（新規施策: Plan強化版）
+
+- [x] T120 [P] Create OutlineValidator service with validation rules (行数/階層/フォーマット/文字数) in src/BlogDraftWebApp.Core/Services/OutlineValidator.cs
+- [x] T121 [P] Create OutlineConstraintViolationException in src/BlogDraftWebApp.Core/Exceptions/OutlineConstraintViolationException.cs
+- [x] T122 Update PromptComposer ComposeAsync method for Step1 to enforce: boxed output format (「出力は `-` で始まる箇条書きのみ」), line limits (5〜15行), hierarchy depth limit (深さ最大2), prohibited elements (禁止: `#` 見出し、段落文、番号付きリスト等) in src/BlogDraftWebApp.Core/Services/PromptComposer.cs (depends on T013)
+- [x] T123 [P] Implement RAG chunk filtering for Step1 in PromptComposer (reduce Top-K from default to 3, max chunk length to 500 chars) to prevent outline inflation in src/BlogDraftWebApp.Core/Services/PromptComposer.cs (depends on T013)
+- [x] T124 Add OutlineMaxOutputTokens parameter to ILlmClient interface in src/BlogDraftWebApp.Core/Services/ILlmClient.cs
+- [x] T125 Update OpenAI SDK call in OpenAIClient.GenerateAsync to respect OutlineMaxOutputTokens (350 tokens) when step is Step1_Outline in src/BlogDraftWebApp.Core/Services/OpenAIClient.cs (depends on T124)
+- [x] T126 [P] Integrate OutlineValidator into WorkflowOrchestrator.GenerateStepAsync: validate generated outline against WorkflowOptions constraints, throw OutlineConstraintViolationException if violated (フェイルファースト: 自動整形しない) in src/BlogDraftWebApp.Core/Services/WorkflowOrchestrator.cs (depends on T120, T014)
 
 ### 排他制御（同一セッションの同時操作防止）
 
@@ -78,7 +88,7 @@
 - [x] T101 Map lock contention to HTTP 409 SESSION_BUSY in src/BlogDraftWebApp.Api/Endpoints/WorkflowEndpoints.cs and src/BlogDraftWebApp.Api/Middleware/GlobalExceptionHandler.cs (depends on T100)
 - [x] T102 [P] Add unit test to verify lock enforces single in-flight operation per session in tests/BlogDraftWebApp.Core.UnitTests/Services/WorkflowOrchestratorTests.cs (depends on T100)
 
-**Checkpoint**: 基盤完成 - ユーザーストーリー実装が並行開始可能
+**Checkpoint**: 基盤完成（アウトライン短文化施策含む）- ユーザーストーリー実装が並行開始可能
 
 ---
 
@@ -97,7 +107,7 @@
 - [x] T022 [P] [US1] Create SaveStepRequest DTO in src/BlogDraftWebApp.Api/Models/SaveStepRequest.cs
 - [x] T023 [P] [US1] Create ConfirmStepRequest DTO in src/BlogDraftWebApp.Api/Models/ConfirmStepRequest.cs
 - [x] T024 [US1] Implement POST /workflow/sessions endpoint in src/BlogDraftWebApp.Api/Endpoints/WorkflowEndpoints.cs (depends on T018, T019, T012)
-- [x] T025 [US1] Implement POST /workflow/sessions/{id}/steps/outline/generate endpoint (depends on T020, T021, T012, T013)
+- [x] T025 [US1] Implement POST /workflow/sessions/{id}/steps/outline/generate endpoint with OutlineMaxOutputTokens parameter and validation integration (depends on T020, T021, T012, T013, T126)
 - [x] T026 [US1] Implement POST /workflow/sessions/{id}/steps/outline/save endpoint (depends on T022, T012)
 - [x] T027 [US1] Implement POST /workflow/sessions/{id}/steps/outline/confirm endpoint (depends on T023, T012)
 
@@ -275,14 +285,16 @@
 ### ユニットテスト
 
 - [x] T077 [P] Write unit tests for WorkflowSession state transitions in tests/BlogDraftWebApp.Core.UnitTests/Models/WorkflowSessionTests.cs
-- [x] T078 [P] Write unit tests for WorkflowOrchestrator in tests/BlogDraftWebApp.Core.UnitTests/Services/WorkflowOrchestratorTests.cs
+- [x] T078 [P] Write unit tests for WorkflowOrchestrator including outline validation integration in tests/BlogDraftWebApp.Core.UnitTests/Services/WorkflowOrchestratorTests.cs
 - [x] T079 [P] Write unit tests for LiteDbWorkflowRepository (with temp DB) in tests/BlogDraftWebApp.Core.UnitTests/Services/LiteDbWorkflowRepositoryTests.cs
-- [x] T080 [P] Write unit tests for PromptComposer step-specific logic in tests/BlogDraftWebApp.Core.UnitTests/Services/PromptComposerTests.cs
+- [x] T080 [P] Write unit tests for PromptComposer step-specific logic including Step1 strict template and RAG filtering in tests/BlogDraftWebApp.Core.UnitTests/Services/PromptComposerTests.cs
+- [x] T127 [P] Write unit tests for OutlineValidator (valid/invalid outlines, constraint violations) in tests/BlogDraftWebApp.Core.UnitTests/Services/OutlineValidatorTests.cs (depends on T120)
 
 ### 統合テスト
 
 - [x] T081 [P] Write integration test for POST /workflow/sessions in tests/BlogDraftWebApp.Api.IntegrationTests/WorkflowEndpointsTests.cs
-- [x] T082 [P] Write integration test for workflow step generation with step order validation in tests/BlogDraftWebApp.Api.IntegrationTests/WorkflowEndpointsTests.cs
+- [x] T082 [P] Write integration test for workflow step generation with step order validation and outline constraint violations in tests/BlogDraftWebApp.Api.IntegrationTests/WorkflowEndpointsTests.cs
+- [x] T128 [P] Write integration test for outline constraint violations (OUTLINE_CONSTRAINT_VIOLATION error) with various invalid formats/sizes in tests/BlogDraftWebApp.Api.IntegrationTests/WorkflowEndpointsTests.cs (depends on T126)
 - [x] T083 [P] Write integration test for workflow preview endpoints (no LLM call) in tests/BlogDraftWebApp.Api.IntegrationTests/WorkflowEndpointsTests.cs
 - [x] T084 [P] Write integration test for session expiration (410 Gone) in tests/BlogDraftWebApp.Api.IntegrationTests/WorkflowEndpointsTests.cs
 
@@ -324,7 +336,7 @@
 
 ### 既存機能との統合
 
-- [x] T092 Update GlobalExceptionHandler to catch new workflow exceptions in src/BlogDraftWebApp.Api/Middleware/GlobalExceptionHandler.cs
+- [x] T092 Update GlobalExceptionHandler to catch workflow exceptions including OutlineConstraintViolationException and map to OUTLINE_CONSTRAINT_VIOLATION error code in src/BlogDraftWebApp.Api/Middleware/GlobalExceptionHandler.cs
 - [x] T093 Register workflow services in Program.cs DI container
 - [x] T094 Verify existing single-shot generation (/draft) still works alongside workflow
 

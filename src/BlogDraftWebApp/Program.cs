@@ -99,6 +99,7 @@ builder.Services.AddSingleton(sp =>
 });
 
 builder.Services.AddSingleton<WorkflowSessionLock>();
+builder.Services.AddSingleton<OutlineValidator>();
 builder.Services.AddSingleton<IWorkflowRepository, LiteDbWorkflowRepository>();
 builder.Services.AddScoped<IWorkflowOrchestrator, WorkflowOrchestrator>();
 builder.Services.AddScoped<ClipboardService>();

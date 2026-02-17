@@ -1,4 +1,5 @@
 using System.Net;
+using System.Text.Json;
 using BlogDraftWebApp.Core.Configuration;
 using BlogDraftWebApp.Core.Exceptions;
 using BlogDraftWebApp.Core.Models;
@@ -87,5 +88,42 @@ public sealed class OpenAiLlmClientTests
         var ex = Assert.ThrowsAsync<LlmException>(async () => await client.GenerateAsync(prompt, CancellationToken.None));
         Assert.That(ex!.ErrorCode, Is.EqualTo("LLM_ERROR"));
         Assert.That(ex.IsRetryable, Is.True);
+    }
+
+    [Test]
+    public async Task GenerateAsync_OutlineMaxOutputTokens指定時_リクエストへ反映する()
+    {
+        int? actualMaxTokens = null;
+
+        var handler = new StubHttpMessageHandler(async (request, _) =>
+        {
+            var body = await request.Content!.ReadAsStringAsync();
+            using var json = JsonDocument.Parse(body);
+            if (json.RootElement.TryGetProperty("max_completion_tokens", out var tokenProp)
+                && tokenProp.TryGetInt32(out var value))
+            {
+                actualMaxTokens = value;
+            }
+
+            const string response = "{\"choices\":[{\"message\":{\"content\":\"- a\\n- b\\n- c\\n- d\\n- e\"}}]}";
+            return StubHttpMessageHandler.Json(HttpStatusCode.OK, response);
+        });
+
+        var httpClient = new HttpClient(handler);
+        var options = Options.Create(new LlmOptions
+        {
+            ApiKey = "sk-test",
+            BaseUrl = "https://api.openai.com/v1",
+            Model = "gpt-test",
+            MaxTokens = 4096,
+            RequestTimeoutSeconds = 30,
+        });
+
+        var client = new OpenAiLlmClient(httpClient, NullLogger<OpenAiLlmClient>.Instance, options);
+        var prompt = new Prompt { SystemMessage = "sys", UserOverview = "user" };
+
+        _ = await client.GenerateAsync(prompt, CancellationToken.None, maxOutputTokens: 350);
+
+        Assert.That(actualMaxTokens, Is.EqualTo(350));
     }
 }
