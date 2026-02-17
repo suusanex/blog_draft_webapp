@@ -8,7 +8,7 @@ namespace BlogDraftWebApp.Core.Services;
 /// </summary>
 public sealed class StubLlmClient : ILlmClient
 {
-    public Task<Draft> GenerateAsync(Prompt prompt, CancellationToken cancellationToken)
+    public Task<Draft> GenerateAsync(Prompt prompt, CancellationToken cancellationToken, int? maxOutputTokens = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
 

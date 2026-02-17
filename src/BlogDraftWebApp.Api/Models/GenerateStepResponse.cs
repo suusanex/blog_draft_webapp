@@ -9,4 +9,5 @@ public sealed class GenerateStepResponse
     public string Model { get; set; } = string.Empty;
     public DateTimeOffset GeneratedAt { get; set; }
     public string? Warning { get; set; }
+    public int? OutlineMaxOutputTokens { get; set; }
 }

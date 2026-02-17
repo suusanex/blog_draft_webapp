@@ -1,0 +1,80 @@
+using BlogDraftWebApp.Core.Configuration;
+using BlogDraftWebApp.Core.Exceptions;
+using BlogDraftWebApp.Core.Services;
+
+namespace BlogDraftWebApp.Core.UnitTests.Services;
+
+public sealed class OutlineValidatorTests
+{
+    private static readonly WorkflowOptions DefaultOptions = new()
+    {
+        OutlineMinLines = 5,
+        OutlineMaxLines = 15,
+        OutlineMaxDepth = 2,
+        OutlineMaxLineLength = 120,
+        OutlineMaxTotalChars = 2000,
+    };
+
+    [Test]
+    public void ValidateOrThrow_有効な箇条書き_例外を投げない()
+    {
+        var validator = new OutlineValidator();
+        var content = string.Join("\n", new[]
+        {
+            "- 背景",
+            "  - 課題",
+            "- 目的",
+            "  - 対象読者",
+            "- 結論",
+        });
+
+        Assert.DoesNotThrow(() => validator.ValidateOrThrow(content, DefaultOptions));
+    }
+
+    [TestCase("# 見出し\n- a\n- b\n- c\n- d", "箇条書き")]
+    [TestCase("1. 番号\n- a\n- b\n- c\n- d", "箇条書き")]
+    [TestCase("文章だけ\n- a\n- b\n- c\n- d", "箇条書き")]
+    public void ValidateOrThrow_禁止フォーマット_例外を投げる(string content, string expected)
+    {
+        var validator = new OutlineValidator();
+
+        var ex = Assert.Throws<OutlineConstraintViolationException>(() =>
+            validator.ValidateOrThrow(content, DefaultOptions));
+
+        Assert.That(ex, Is.Not.Null);
+        Assert.That(ex!.Message, Does.Contain(expected));
+    }
+
+    [Test]
+    public void ValidateOrThrow_階層が深すぎる_例外を投げる()
+    {
+        var validator = new OutlineValidator();
+        var content = string.Join("\n", new[]
+        {
+            "- a",
+            "  - b",
+            "    - c",
+            "      - d",
+            "- e",
+        });
+
+        var ex = Assert.Throws<OutlineConstraintViolationException>(() =>
+            validator.ValidateOrThrow(content, DefaultOptions));
+
+        Assert.That(ex, Is.Not.Null);
+        Assert.That(ex!.Message, Does.Contain("階層"));
+    }
+
+    [Test]
+    public void ValidateOrThrow_行数超過_例外を投げる()
+    {
+        var validator = new OutlineValidator();
+        var lines = Enumerable.Range(1, 16).Select(i => $"- item {i}");
+
+        var ex = Assert.Throws<OutlineConstraintViolationException>(() =>
+            validator.ValidateOrThrow(string.Join("\n", lines), DefaultOptions));
+
+        Assert.That(ex, Is.Not.Null);
+        Assert.That(ex!.Message, Does.Contain("行数"));
+    }
+}

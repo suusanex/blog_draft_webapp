@@ -138,4 +138,77 @@ public sealed class PromptComposerTests
         Assert.That(prompt.UserOverview, Does.Contain("確定下書き"));
         Assert.That(prompt.UserOverview, Does.Contain("本文"));
     }
+
+    [Test]
+    public async Task ComposeAsync_Step1Outline_厳格テンプレートを含む()
+    {
+        var composer = new PromptComposer();
+
+        var overview = new BlogOverview("0123456789");
+        var styleCard = new StyleCard
+        {
+            SystemPrompt = "sys",
+            Content = "content",
+        };
+
+        var prompt = await composer.ComposeAsync(
+            WorkflowStep.Step1_Outline,
+            overview,
+            Array.Empty<RAGChunk>(),
+            styleCard,
+            null,
+            null,
+            CancellationToken.None);
+
+        Assert.That(prompt.UserOverview, Does.Contain("アウトライン生成（厳格フォーマット）"));
+        Assert.That(prompt.UserOverview, Does.Contain("行数は 5〜15 行"));
+        Assert.That(prompt.UserOverview, Does.Contain("階層は最大 2"));
+        Assert.That(prompt.UserOverview, Does.Contain("禁止: `#`見出し"));
+    }
+
+    [Test]
+    public async Task ComposeAsync_Step1Outline_Rag絞り込みを適用する()
+    {
+        var composer = new PromptComposer();
+
+        var overview = new BlogOverview("0123456789");
+        var styleCard = new StyleCard
+        {
+            SystemPrompt = "sys",
+            Content = "content",
+        };
+
+        var ragChunks = Enumerable.Range(1, 5)
+            .Select(i => new RAGChunk
+            {
+                Text = new string((char)('a' + i), 700),
+                Score = 1.0 - (i * 0.1),
+                SourceTitle = $"title-{i}",
+                SourceUrl = $"https://example.com/{i}",
+            })
+            .ToList();
+
+        var prompt = await composer.ComposeAsync(
+            WorkflowStep.Step1_Outline,
+            overview,
+            ragChunks,
+            styleCard,
+            null,
+            null,
+            CancellationToken.None);
+
+        Assert.That(prompt.RagContext, Does.Contain("title-1"));
+        Assert.That(prompt.RagContext, Does.Contain("title-2"));
+        Assert.That(prompt.RagContext, Does.Contain("title-3"));
+        Assert.That(prompt.RagContext, Does.Not.Contain("title-4"));
+        Assert.That(prompt.RagContext, Does.Not.Contain("title-5"));
+
+        var maxLineLength = prompt.RagContext
+            .Split('\n')
+            .Where(x => x.TrimStart().StartsWith('>'))
+            .Select(x => x.Length)
+            .DefaultIfEmpty(0)
+            .Max();
+        Assert.That(maxLineLength, Is.LessThanOrEqualTo(510));
+    }
 }

@@ -11,6 +11,8 @@ namespace BlogDraftWebApp.Api.IntegrationTests;
 
 public sealed class WorkflowEndpointsTests
 {
+    private const string ValidOutline = "- 背景\n  - 課題\n- 目的\n  - 対象読者\n- 結論";
+
     [Test]
     public async Task CreateSession_ReturnsSessionInfo()
     {
@@ -39,8 +41,8 @@ public sealed class WorkflowEndpointsTests
             .ReturnsAsync(new RetrievalResult(new List<RAGChunk>(), null));
 
         factory.LlmClientMock
-            .Setup(x => x.GenerateAsync(It.IsAny<Prompt>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new Draft { Content = "outline", Model = "test", GeneratedAt = DateTimeOffset.UtcNow });
+            .Setup(x => x.GenerateAsync(It.IsAny<Prompt>(), It.IsAny<CancellationToken>(), It.IsAny<int?>()))
+            .ReturnsAsync(new Draft { Content = ValidOutline, Model = "test", GeneratedAt = DateTimeOffset.UtcNow });
 
         using var http = factory.CreateClient();
 
@@ -60,7 +62,7 @@ public sealed class WorkflowEndpointsTests
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
         var payload = await response.Content.ReadFromJsonAsync<GenerateStepResponse>();
         Assert.That(payload, Is.Not.Null);
-        Assert.That(payload!.Generated, Is.EqualTo("outline"));
+        Assert.That(payload!.Generated, Is.EqualTo(ValidOutline));
     }
 
     [Test]
@@ -153,7 +155,7 @@ public sealed class WorkflowEndpointsTests
         Assert.That(payload!.Prompt, Does.Contain("アウトライン生成"));
         Assert.That(payload.RagHitCount, Is.EqualTo(1));
 
-        factory.LlmClientMock.Verify(x => x.GenerateAsync(It.IsAny<Prompt>(), It.IsAny<CancellationToken>()), Times.Never);
+        factory.LlmClientMock.Verify(x => x.GenerateAsync(It.IsAny<Prompt>(), It.IsAny<CancellationToken>(), It.IsAny<int?>()), Times.Never);
     }
 
     [Test]
@@ -176,9 +178,9 @@ public sealed class WorkflowEndpointsTests
 
         Prompt? executedPrompt = null;
         factory.LlmClientMock
-            .Setup(x => x.GenerateAsync(It.IsAny<Prompt>(), It.IsAny<CancellationToken>()))
-            .Callback<Prompt, CancellationToken>((prompt, _) => executedPrompt = prompt)
-            .ReturnsAsync(new Draft { Content = "outline", Model = "test", GeneratedAt = DateTimeOffset.UtcNow });
+            .Setup(x => x.GenerateAsync(It.IsAny<Prompt>(), It.IsAny<CancellationToken>(), It.IsAny<int?>()))
+            .Callback<Prompt, CancellationToken, int?>((prompt, _, _) => executedPrompt = prompt)
+            .ReturnsAsync(new Draft { Content = ValidOutline, Model = "test", GeneratedAt = DateTimeOffset.UtcNow });
 
         using var http = factory.CreateClient();
 
@@ -215,11 +217,11 @@ public sealed class WorkflowEndpointsTests
             .ReturnsAsync(new RetrievalResult(new List<RAGChunk>(), null));
 
         factory.LlmClientMock
-            .Setup(x => x.GenerateAsync(It.IsAny<Prompt>(), It.IsAny<CancellationToken>()))
+            .Setup(x => x.GenerateAsync(It.IsAny<Prompt>(), It.IsAny<CancellationToken>(), It.IsAny<int?>()))
             .Returns(async () =>
             {
                 await Task.Delay(300);
-                return new Draft { Content = "outline", Model = "test", GeneratedAt = DateTimeOffset.UtcNow };
+                return new Draft { Content = ValidOutline, Model = "test", GeneratedAt = DateTimeOffset.UtcNow };
             });
 
         using var http = factory.CreateClient();
@@ -328,8 +330,8 @@ public sealed class WorkflowEndpointsTests
             .ReturnsAsync(() => retrievalQueue.Dequeue());
 
         factory.LlmClientMock
-            .Setup(x => x.GenerateAsync(It.IsAny<Prompt>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new Draft { Content = "outline", Model = "test", GeneratedAt = DateTimeOffset.UtcNow });
+            .Setup(x => x.GenerateAsync(It.IsAny<Prompt>(), It.IsAny<CancellationToken>(), It.IsAny<int?>()))
+            .ReturnsAsync(new Draft { Content = ValidOutline, Model = "test", GeneratedAt = DateTimeOffset.UtcNow });
 
         using var http = factory.CreateClient();
         var createResponse = await http.PostAsJsonAsync("/workflow/sessions", new CreateSessionRequest
@@ -359,5 +361,70 @@ public sealed class WorkflowEndpointsTests
         Assert.That(confirmed, Is.Not.Null);
         Assert.That(confirmed!.Confirmed, Is.True);
         Assert.That(confirmed.NewSnapshotId, Is.EqualTo(refresh.NewSnapshotId));
+    }
+
+    [Test]
+    public async Task GenerateOutline_ReturnsOutlineConstraintViolation_WhenGeneratedFormatInvalid()
+    {
+        await using var factory = new TestWebApplicationFactory();
+
+        factory.RetrievalServiceMock
+            .Setup(x => x.RetrieveAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new RetrievalResult(new List<RAGChunk>(), null));
+
+        factory.LlmClientMock
+            .Setup(x => x.GenerateAsync(It.IsAny<Prompt>(), It.IsAny<CancellationToken>(), It.IsAny<int?>()))
+            .ReturnsAsync(new Draft
+            {
+                Content = "# invalid\n- one\n- two\n- three\n- four",
+                Model = "test",
+                GeneratedAt = DateTimeOffset.UtcNow,
+            });
+
+        using var http = factory.CreateClient();
+
+        var createResponse = await http.PostAsJsonAsync("/workflow/sessions", new CreateSessionRequest
+        {
+            Overview = "0123456789",
+        });
+        var created = await createResponse.Content.ReadFromJsonAsync<CreateSessionResponse>();
+        Assert.That(created, Is.Not.Null);
+
+        var response = await http.PostAsJsonAsync($"/workflow/sessions/{created!.SessionId}/steps/outline/generate", new GenerateStepRequest
+        {
+            Regenerate = false,
+        });
+
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
+        var payload = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+        Assert.That(payload, Is.Not.Null);
+        Assert.That(payload!.ErrorCode, Is.EqualTo("OUTLINE_CONSTRAINT_VIOLATION"));
+    }
+
+    [TestCase("# 見出し\n- a\n- b\n- c\n- d")]
+    [TestCase("1. 番号\n- a\n- b\n- c\n- d")]
+    [TestCase("- a\n  - b\n    - c\n      - d\n- e")]
+    [TestCase("- 1\n- 2\n- 3\n- 4")]
+    public async Task SaveOutline_ReturnsOutlineConstraintViolation_ForInvalidFormats(string invalidOutline)
+    {
+        await using var factory = new TestWebApplicationFactory();
+        using var http = factory.CreateClient();
+
+        var createResponse = await http.PostAsJsonAsync("/workflow/sessions", new CreateSessionRequest
+        {
+            Overview = "0123456789",
+        });
+        var created = await createResponse.Content.ReadFromJsonAsync<CreateSessionResponse>();
+        Assert.That(created, Is.Not.Null);
+
+        var response = await http.PostAsJsonAsync($"/workflow/sessions/{created!.SessionId}/steps/outline/save", new SaveStepRequest
+        {
+            EditedContent = invalidOutline,
+        });
+
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
+        var payload = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+        Assert.That(payload, Is.Not.Null);
+        Assert.That(payload!.ErrorCode, Is.EqualTo("OUTLINE_CONSTRAINT_VIOLATION"));
     }
 }

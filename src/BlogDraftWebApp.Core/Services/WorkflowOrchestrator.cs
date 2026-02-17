@@ -15,6 +15,7 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
     private readonly IRetrievalService _retrievalService;
     private readonly IPromptComposer _promptComposer;
     private readonly ILlmClient _llmClient;
+    private readonly OutlineValidator _outlineValidator;
     private readonly StyleCard _styleCard;
     private readonly WorkflowSessionLock _sessionLock;
     private readonly WorkflowOptions _options;
@@ -25,6 +26,7 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
         IRetrievalService retrievalService,
         IPromptComposer promptComposer,
         ILlmClient llmClient,
+        OutlineValidator outlineValidator,
         StyleCard styleCard,
         WorkflowSessionLock sessionLock,
         IOptions<WorkflowOptions> options,
@@ -34,6 +36,7 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
         _retrievalService = retrievalService;
         _promptComposer = promptComposer;
         _llmClient = llmClient;
+        _outlineValidator = outlineValidator;
         _styleCard = styleCard;
         _sessionLock = sessionLock;
         _options = options.Value;
@@ -163,7 +166,16 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
             session.DraftConfirmed ?? session.DraftEdited ?? session.DraftGenerated,
             cancellationToken);
 
-        var draft = await _llmClient.GenerateAsync(prompt, cancellationToken);
+        var draft = await _llmClient.GenerateAsync(
+            prompt,
+            cancellationToken,
+            step == WorkflowStep.Step1_Outline ? _options.OutlineMaxOutputTokens : null);
+
+        if (step == WorkflowStep.Step1_Outline)
+        {
+            _outlineValidator.ValidateOrThrow(draft.Content, _options);
+        }
+
         var content = ApplyGeneratedContent(session, step, draft.Content);
         session.Touch(_options.SessionRetentionDays);
         await _repository.UpdateSessionAsync(session, cancellationToken);
@@ -288,8 +300,7 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
         switch (step)
         {
             case WorkflowStep.Step1_Outline:
-                var outline = new Outline(editedContent);
-                outline.Validate();
+                _outlineValidator.ValidateOrThrow(editedContent, _options);
                 session.OutlineEdited = editedContent;
                 return;
             case WorkflowStep.Step2_Draft:
@@ -316,8 +327,7 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
         switch (step)
         {
             case WorkflowStep.Step1_Outline:
-                var outline = new Outline(confirmedContent);
-                outline.Validate();
+                _outlineValidator.ValidateOrThrow(confirmedContent, _options);
                 session.OutlineConfirmed = confirmedContent;
                 session.TransitionToStep(WorkflowStep.Step2_Draft, _options.SessionRetentionDays);
                 return WorkflowStep.Step2_Draft;
