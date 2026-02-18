@@ -355,6 +355,284 @@ graph LR
 
 ---
 
+## UI/UX Design（画面設計）
+
+### Design Principles
+
+**目的**: ワークフロー型生成の「段階性」「人間レビュー」「順序保証」をUI上で明確に表現し、ユーザーが迷わず操作できるようにする。
+
+**課題（現状）**:
+- ボタンが横一列に並び、処理順序・優先度が不明
+- 「生成」「プレビュー」「保存」「確定」が同列で、どれを先に押すべきか分からない
+- プレビューが生成結果の下に追加表示され、混在して見づらい
+- 現在ステップの表示がテキストのみで、進行状況・次の行き先が不明瞭
+
+**改善方針**:
+1. **ステップ進行の可視化**: 3ステップ（Outline → Draft → Title）をプログレスバー/ステッパーで明示
+2. **ボタンの優先順位化**: 主要アクション（生成/確定）を大きく上部に、補助アクション（プレビュー/保存/RAG再検索）を下部または折りたたみに配置
+3. **プレビューの分離表示**: プレビューはモーダルまたは折りたたみ領域で表示し、既存コンテンツと混在させない
+4. **次のステップへの導線明示**: 確定後、「次へ進む」ボタンまたは自動遷移でStep2/3画面へ遷移
+
+### Screen Layout
+
+#### Step1: Outline Generation（アウトライン生成）
+
+```
+┌─────────────────────────────────────────────────┐
+│ ワークフロー生成                                   │
+├─────────────────────────────────────────────────┤
+│ [Progress] Step1: アウトライン → Step2 → Step3    │
+│                    ^^^^^^^^                      │
+├─────────────────────────────────────────────────┤
+│ セッションID: xxx                                 │
+│ 作成日時: 2026-02-05                              │
+├─────────────────────────────────────────────────┤
+│ ┌─ 主要アクション ───────────────────────────┐   │
+│ │ [生成] アウトラインを生成                   │   │
+│ │ (既に生成済みの場合は "再生成")              │   │
+│ └──────────────────────────────────────────┘   │
+│                                                   │
+│ ┌─ アウトライン編集 ────────────────────────┐   │
+│ │ [TextArea] (12行, 自動保存)                 │   │
+│ └──────────────────────────────────────────┘   │
+│                                                   │
+│ ┌─ 次のステップへ ──────────────────────────┐   │
+│ │ [確定して次へ進む] → Step2: 下書き生成       │   │
+│ └──────────────────────────────────────────┘   │
+│                                                   │
+│ ┌─ 補助操作（折りたたみ可）──────────────────┐   │
+│ │ [▼ 詳細オプション]                          │   │
+│ │   - [プレビュー] プロンプトを確認（モーダル）  │   │
+│ │   - [RAG再検索] コンテキストを更新（オプション）│   │
+│ │   - [保存] 明示的に保存（自動保存あり）       │   │
+│ └──────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────┘
+```
+
+**配置ルール**:
+- **主要アクション（上部）**: 生成/再生成ボタン（大きく、btn-primary）
+- **編集領域（中央）**: TextArea（自動保存メッセージ表示）
+- **次のステップへ（下部・大）**: 確定ボタン（btn-success、大きく）
+- **補助操作（折りたたみ）**: プレビュー/RAG再検索/手動保存（btn-outline-secondary、小さく）
+
+**プレビュー表示方法**:
+- 「プレビュー」ボタン押下時、モーダルウィンドウまたは折りたたみ領域でプロンプト全文を表示
+- 既存のアウトライン編集エリアとは視覚的に分離
+
+**状態遷移の明示**:
+- 確定前: 「確定して次へ進む」ボタンが有効
+- 確定後: 自動的に `/workflow/draft/{sessionId}` へナビゲート
+- 確定後に Step1 に戻った場合: 「アウトラインは確定済みです。下書きステップへ進んでください」メッセージ + 「下書きへ進む」ボタン表示
+
+#### Step2: Draft Generation（下書き生成）
+
+```
+┌─────────────────────────────────────────────────┐
+│ [Progress] Step1 → Step2: 下書き → Step3         │
+│                    ^^^^^^^^                      │
+├─────────────────────────────────────────────────┤
+│ ┌─ 主要アクション ───────────────────────────┐   │
+│ │ [生成] 下書きを生成                         │   │
+│ └──────────────────────────────────────────┘   │
+│                                                   │
+│ ┌─ 下書き編集 ──────────────────────────────┐   │
+│ │ [TextArea] (16行, 自動保存)                 │   │
+│ └──────────────────────────────────────────┘   │
+│                                                   │
+│ ┌─ 次のステップへ ──────────────────────────┐   │
+│ │ [確定して次へ進む] → Step3: タイトル生成     │   │
+│ └──────────────────────────────────────────┘   │
+│                                                   │
+│ ┌─ 補助操作（折りたたみ）──────────────────┐   │
+│ │ [▼ 詳細オプション]                          │   │
+│ │   - [プレビュー] プロンプトを確認（モーダル）  │   │
+│ │   - [RAG再検索] （任意）                    │   │
+│ └──────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────┘
+```
+
+**Step1との共通パターン**: 主要アクション → 編集領域 → 確定ボタン → 補助操作の順
+
+#### Step3: TitleHook Generation（タイトル＆導入部生成）
+
+```
+┌─────────────────────────────────────────────────┐
+│ [Progress] Step1 → Step2 → Step3: タイトル       │
+│                            ^^^^^^^^              │
+├─────────────────────────────────────────────────┤
+│ ┌─ 主要アクション ───────────────────────────┐   │
+│ │ [生成] タイトル案を生成（3案）              │   │
+│ │ [再生成] 新しい3案を生成                    │   │
+│ └──────────────────────────────────────────┘   │
+│                                                   │
+│ ┌─ タイトル案選択 ──────────────────────────┐   │
+│ │ [○ 案1] Title 1 / Hook 1                   │   │
+│ │ [○ 案2] Title 2 / Hook 2                   │   │
+│ │ [○ 案3] Title 3 / Hook 3                   │   │
+│ └──────────────────────────────────────────┘   │
+│                                                   │
+│ ┌─ 編集 ────────────────────────────────────┐   │
+│ │ タイトル: [Input]                           │   │
+│ │ 導入部: [TextArea]                          │   │
+│ └──────────────────────────────────────────┘   │
+│                                                   │
+│ ┌─ 完了 ────────────────────────────────────┐   │
+│ │ [確定して完了] → Completed                  │   │
+│ │ [コピー] 全文をクリップボードへ             │   │
+│ └──────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────┘
+```
+
+### Component Structure
+
+#### Progress Stepper（共通コンポーネント）
+
+すべてのステップ画面（WorkflowOutline/Draft/Title.razor）で共通のステッパーコンポーネントを表示：
+
+```razor
+<div class="workflow-progress mb-4">
+    <div class="row text-center">
+        <div class="col-4">
+            <div class="step @(CurrentStep == WorkflowStep.Step1_Outline ? "active" : (IsStepCompleted(WorkflowStep.Step1_Outline) ? "completed" : ""))">
+                <div class="step-number">1</div>
+                <div class="step-label">アウトライン</div>
+            </div>
+        </div>
+        <div class="col-4">
+            <div class="step @(CurrentStep == WorkflowStep.Step2_Draft ? "active" : (IsStepCompleted(WorkflowStep.Step2_Draft) ? "completed" : ""))">
+                <div class="step-number">2</div>
+                <div class="step-label">下書き</div>
+            </div>
+        </div>
+        <div class="col-4">
+            <div class="step @(CurrentStep == WorkflowStep.Step3_TitleHook ? "active" : (IsStepCompleted(WorkflowStep.Step3_TitleHook) ? "completed" : ""))">
+                <div class="step-number">3</div>
+                <div class="step-label">タイトル</div>
+            </div>
+        </div>
+    </div>
+</div>
+```
+
+**CSS**:
+```css
+.workflow-progress .step {
+    border: 2px solid #ddd;
+    border-radius: 8px;
+    padding: 12px;
+}
+
+.workflow-progress .step.active {
+    border-color: #0d6efd;
+    background-color: #e7f3ff;
+    font-weight: bold;
+}
+
+.workflow-progress .step.completed {
+    border-color: #198754;
+    background-color: #d1e7dd;
+}
+
+.workflow-progress .step-number {
+    display: inline-block;
+    width: 32px;
+    height: 32px;
+    line-height: 32px;
+    border-radius: 50%;
+    background-color: #ddd;
+    color: #333;
+    font-weight: bold;
+}
+
+.workflow-progress .step.active .step-number {
+    background-color: #0d6efd;
+    color: white;
+}
+
+.workflow-progress .step.completed .step-number {
+    background-color: #198754;
+    color: white;
+}
+```
+
+#### Button Hierarchy（ボタン階層）
+
+```razor
+<!-- 主要アクション（大きく、目立つ） -->
+<div class="mb-4">
+    <button class="btn btn-primary btn-lg w-100" @onclick="GenerateAsync">
+        @(HasGenerated ? "再生成" : "アウトラインを生成")
+    </button>
+</div>
+
+<!-- 編集領域 -->
+<div class="mb-4">
+    <label class="form-label">アウトライン</label>
+    <InputTextArea class="form-control" ... />
+    @if (!string.IsNullOrWhiteSpace(_autoSaveMessage))
+    {
+        <small class="text-muted">@_autoSaveMessage</small>
+    }
+</div>
+
+<!-- 次のステップへ（大きく、成功色） -->
+<div class="mb-4">
+    <button class="btn btn-success btn-lg w-100" @onclick="ConfirmAsync" disabled="@(!CanConfirm)">
+        確定して次へ進む → @NextStepName
+    </button>
+</div>
+
+<!-- 補助操作（折りたたみ） -->
+<details class="mb-3">
+    <summary class="btn btn-link">▼ 詳細オプション</summary>
+    <div class="mt-3 d-flex flex-column gap-2">
+        <button class="btn btn-outline-secondary" @onclick="PreviewAsync">プロンプトを確認</button>
+        <button class="btn btn-outline-warning" @onclick="RefreshRagAsync">RAG再検索</button>
+        <button class="btn btn-outline-secondary" @onclick="SaveAsync">手動保存</button>
+    </div>
+</details>
+```
+
+#### Preview Modal（プレビュー表示）
+
+プレビューはモーダルで表示し、編集領域と混在させない：
+
+```razor
+@if (_showPreviewModal)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-xl modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">LLM 入力内容（プレビュー）</h5>
+                    <button type="button" class="btn-close" @onclick="ClosePreviewModal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-warning">⚠️ この内容は機微情報を含みます。共有しないでください。</div>
+                    <pre style="white-space: pre-wrap;">@_promptPreview</pre>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="ClosePreviewModal">閉じる</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+```
+
+### Implementation Checklist
+
+- [ ] Progress Stepper コンポーネント実装（共通）
+- [ ] WorkflowOutline.razor のボタン配置改善
+- [ ] WorkflowDraft.razor のボタン配置改善
+- [ ] WorkflowTitle.razor のボタン配置改善
+- [ ] プレビューモーダル実装（3画面共通）
+- [ ] 補助操作の折りたたみ実装
+- [ ] CSS スタイル追加（wwwroot/app.css）
+- [ ] E2E テストで画面遷移・ボタン配置を検証
+
+---
+
 ## Data Model（データモデル）
 
 ### Core Entities（コアエンティティ）

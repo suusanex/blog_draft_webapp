@@ -58,3 +58,97 @@ h1:focus {
 .form-floating > .form-control-plaintext:focus::placeholder, .form-floating > .form-control:focus::placeholder {
     text-align: start;
 }
+
+/* Workflow Progress Stepper */
+.workflow-progress {
+    margin-bottom: 2rem;
+}
+
+.workflow-progress .step {
+    border: 2px solid #ddd;
+    border-radius: 8px;
+    padding: 12px;
+    transition: all 0.3s ease;
+}
+
+.workflow-progress .step.active {
+    border-color: #0d6efd;
+    background-color: #e7f3ff;
+    font-weight: bold;
+}
+
+.workflow-progress .step.completed {
+    border-color: #198754;
+    background-color: #d1e7dd;
+}
+
+.workflow-progress .step-number {
+    display: inline-block;
+    width: 32px;
+    height: 32px;
+    line-height: 32px;
+    border-radius: 50%;
+    background-color: #ddd;
+    color: #333;
+    font-weight: bold;
+    margin-bottom: 8px;
+}
+
+.workflow-progress .step.active .step-number {
+    background-color: #0d6efd;
+    color: white;
+}
+
+.workflow-progress .step.completed .step-number {
+    background-color: #198754;
+    color: white;
+}
+
+.workflow-progress .step-label {
+    font-size: 14px;
+}
+
+/* Workflow Action Sections */
+.workflow-section {
+    margin-bottom: 1.5rem;
+    padding: 1rem;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    background-color: #f8f9fa;
+}
+
+.workflow-section h2 {
+    font-size: 1rem;
+    font-weight: bold;
+    margin-bottom: 0.75rem;
+    color: #495057;
+}
+
+/* Details / Summary for collapsible sections */
+details summary {
+    cursor: pointer;
+    user-select: none;
+    color: #006bb7;
+    font-weight: 500;
+}
+
+details summary:hover {
+    color: #004a80;
+    text-decoration: underline;
+}
+
+details[open] summary {
+    margin-bottom: 1rem;
+}
+
+/* Preview Modal */
+.modal.show {
+    display: block;
+}
+
+.modal pre {
+    font-size: 12px;
+    line-height: 1.4;
+    max-height: 60vh;
+    overflow-y: auto;
+}
