@@ -28,21 +28,40 @@
 }
 else
 {
+    <!-- Progress Stepper -->
+    <div class="workflow-progress mb-4">
+        <div class="row text-center">
+            <div class="col-4">
+                <div class="step @("Step1_Outline" == _currentStep ? "active" : (IsStepCompleted("Step1_Outline") ? "completed" : ""))">
+                    <div class="step-number">1</div>
+                    <div class="step-label">アウトライン</div>
+                </div>
+            </div>
+            <div class="col-4">
+                <div class="step @("Step2_Draft" == _currentStep ? "active" : (IsStepCompleted("Step2_Draft") ? "completed" : ""))">
+                    <div class="step-number">2</div>
+                    <div class="step-label">下書き</div>
+                </div>
+            </div>
+            <div class="col-4">
+                <div class="step @("Step3_TitleHook" == _currentStep ? "active" : (IsStepCompleted("Step3_TitleHook") ? "completed" : ""))">
+                    <div class="step-number">3</div>
+                    <div class="step-label">タイトル</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="mb-3">
         <div>セッションID: @_sessionId</div>
         <div>現在のステップ: @_currentStep</div>
     </div>
 
-    <div class="mb-3 d-flex gap-2">
-        <button class="btn btn-primary" disabled="@_isBusy" @onclick="GenerateOutlineAsync">@(_isBusy ? "生成中..." : "アウトラインを生成")</button>
-        <button class="btn btn-outline-secondary" disabled="@_isBusy" @onclick="PreviewOutlineAsync">プロンプトをプレビュー</button>
-        <button class="btn btn-outline-warning" disabled="@_isBusy" @onclick="RefreshRagAsync">RAG再検索</button>
-        <button class="btn btn-secondary" disabled="@_isBusy || string.IsNullOrWhiteSpace(_outlineContent)" @onclick="SaveOutlineAsync">保存</button>
-        <button class="btn btn-success" disabled="@_isBusy || string.IsNullOrWhiteSpace(_outlineContent)" @onclick="ConfirmOutlineAsync">確定</button>
-        @if (_currentStep is "Step2_Draft" or "Step3_TitleHook" or "Completed")
-        {
-            <button class="btn btn-outline-primary" disabled="@_isBusy" @onclick="NavigateToDraft">下書きへ進む</button>
-        }
+    <!-- Main Action -->
+    <div class="mb-4">
+        <button class="btn btn-primary btn-lg w-100" disabled="@_isBusy" @onclick="GenerateOutlineAsync">
+            @(_isBusy ? "生成中..." : (string.IsNullOrWhiteSpace(_outlineContent) ? "アウトラインを生成" : "再生成"))
+        </button>
     </div>
 
     @if (_refreshDiff is not null)
@@ -53,22 +72,66 @@ else
         </div>
     }
 
-    @if (!string.IsNullOrWhiteSpace(_autoSaveMessage))
-    {
-        <div class="text-muted mb-2">@_autoSaveMessage</div>
-    }
-
-    <div class="mb-3">
+    <!-- Edit Area -->
+    <div class="mb-4">
         <label class="form-label">アウトライン</label>
         <InputTextArea class="form-control" Value="@_outlineContent" ValueChanged="OnOutlineChanged" ValueExpression="(() => _outlineContent)" rows="12" />
+        @if (!string.IsNullOrWhiteSpace(_autoSaveMessage))
+        {
+            <small class="text-muted">@_autoSaveMessage</small>
+        }
     </div>
+
+    <!-- Confirm and Next -->
+    @if (_currentStep is "Step1_Outline")
+    {
+        <div class="mb-4">
+            <button class="btn btn-success btn-lg w-100" disabled="@_isBusy || string.IsNullOrWhiteSpace(_outlineContent)" @onclick="ConfirmOutlineAsync">
+                確定して次へ進む → Step2: 下書き生成
+            </button>
+        </div>
+    }
+    else if (_currentStep is "Step2_Draft" or "Step3_TitleHook" or "Completed")
+    {
+        <div class="mb-4">
+            <div class="alert alert-info">アウトラインは確定済みです。下書きステップへ進んでください。</div>
+            <button class="btn btn-outline-primary btn-lg w-100" disabled="@_isBusy" @onclick="NavigateToDraft">
+                下書きへ進む
+            </button>
+        </div>
+    }
+
+    <!-- Auxiliary Actions (Collapsible) -->
+    <details class="mb-3">
+        <summary class="btn btn-link">▼ 詳細オプション</summary>
+        <div class="mt-3 d-flex flex-column gap-2">
+            <button class="btn btn-outline-secondary" disabled="@_isBusy" @onclick="PreviewOutlineAsync">プロンプトを確認</button>
+            <button class="btn btn-outline-warning" disabled="@_isBusy" @onclick="RefreshRagAsync">RAG再検索</button>
+            <button class="btn btn-outline-secondary" disabled="@_isBusy || string.IsNullOrWhiteSpace(_outlineContent)" @onclick="SaveOutlineAsync">手動保存</button>
+        </div>
+    </details>
 }
 
-@if (!string.IsNullOrWhiteSpace(_promptPreview))
+<!-- Preview Modal -->
+@if (_showPreviewModal)
 {
-    <div class="alert alert-warning mt-3">⚠️ この内容は機微情報を含みます。共有しないでください。</div>
-    <h2 class="mt-3">LLM 入力内容（プレビュー）</h2>
-    <pre class="border p-3" style="white-space: pre-wrap;">@_promptPreview</pre>
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-xl modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">LLM 入力内容（プレビュー）</h5>
+                    <button type="button" class="btn-close" @onclick="ClosePreviewModal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-warning">⚠️ この内容は機微情報を含みます。共有しないでください。</div>
+                    <pre style="white-space: pre-wrap;">@_promptPreview</pre>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="ClosePreviewModal">閉じる</button>
+                </div>
+            </div>
+        </div>
+    </div>
 }
 
 @if (!string.IsNullOrWhiteSpace(_warning))
@@ -110,8 +173,26 @@ else
     private bool _isBusy;
     private string? _autoSaveMessage;
     private CancellationTokenSource? _autoSaveCts;
+    private bool _showPreviewModal;
 
     private bool IsCreateDisabled => _isBusy || string.IsNullOrWhiteSpace(_model.Overview);
+
+    private bool IsStepCompleted(string checkStep)
+    {
+        return checkStep switch
+        {
+            "Step1_Outline" => !string.IsNullOrWhiteSpace(_outlineContent) && (_currentStep is "Step2_Draft" or "Step3_TitleHook" or "Completed"),
+            "Step2_Draft" => _currentStep is "Step3_TitleHook" or "Completed",
+            "Step3_TitleHook" => _currentStep is "Completed",
+            _ => false
+        };
+    }
+
+    private void ClosePreviewModal()
+    {
+        _showPreviewModal = false;
+        _promptPreview = null;
+    }
 
     protected override async Task OnParametersSetAsync()
     {
@@ -283,6 +364,7 @@ else
         _error = null;
         _warning = null;
         _promptPreview = null;
+        _showPreviewModal = false;
 
         try
         {
@@ -293,6 +375,7 @@ else
                 var payload = await response.Content.ReadFromJsonAsync<PreviewPromptResponse>();
                 _promptPreview = payload?.Prompt;
                 _warning = payload?.Warning;
+                _showPreviewModal = true;
                 return;
             }
 
@@ -371,6 +454,7 @@ else
             {
                 _currentStep = "Step2_Draft";
                 _promptPreview = null;
+                _showPreviewModal = false;
                 Nav.NavigateTo($"/workflow/draft/{_sessionId}");
                 return;
             }
