@@ -13,4 +13,5 @@ public interface IPromptComposer
         string? outline,
         string? draft,
         CancellationToken cancellationToken);
+    Task<Prompt> ComposeTitleHookAsync(string articleBody, StyleCard styleCard, CancellationToken cancellationToken);
 }

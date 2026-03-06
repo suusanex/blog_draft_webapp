@@ -43,7 +43,6 @@ public static class WorkflowEndpoints
         app.MapGet("/workflow/sessions/{sessionId}", async (
             string sessionId,
             IWorkflowOrchestrator orchestrator,
-            HttpContext httpContext,
             CancellationToken cancellationToken) =>
         {
             var session = await orchestrator.GetSessionAsync(sessionId, cancellationToken);
@@ -143,7 +142,6 @@ public static class WorkflowEndpoints
             GenerateStepRequest request,
             IWorkflowOrchestrator orchestrator,
             IOptions<WorkflowOptions> options,
-            HttpContext httpContext,
             CancellationToken cancellationToken) =>
         {
             var result = await orchestrator.GenerateStepAsync(
@@ -169,17 +167,9 @@ public static class WorkflowEndpoints
             string sessionId,
             SaveStepRequest request,
             IWorkflowOrchestrator orchestrator,
-            IHostEnvironment env,
-            HttpContext httpContext,
             CancellationToken cancellationToken) =>
         {
-            var validationError = ValidateOutline(request?.EditedContent, env, httpContext);
-            if (validationError is not null)
-            {
-                return validationError;
-            }
-
-            await orchestrator.SaveStepAsync(sessionId, WorkflowStep.Step1_Outline, request!.EditedContent, cancellationToken);
+            await orchestrator.SaveStepAsync(sessionId, WorkflowStep.Step1_Outline, request?.EditedContent ?? string.Empty, cancellationToken);
             return Results.Ok(new { sessionId, step = "outline", saved = true });
         });
 
@@ -252,17 +242,9 @@ public static class WorkflowEndpoints
             string sessionId,
             SaveStepRequest request,
             IWorkflowOrchestrator orchestrator,
-            IHostEnvironment env,
-            HttpContext httpContext,
             CancellationToken cancellationToken) =>
         {
-            var validationError = ValidateDraft(request?.EditedContent, env, httpContext);
-            if (validationError is not null)
-            {
-                return validationError;
-            }
-
-            await orchestrator.SaveStepAsync(sessionId, WorkflowStep.Step2_Draft, request!.EditedContent, cancellationToken);
+            await orchestrator.SaveStepAsync(sessionId, WorkflowStep.Step2_Draft, request?.EditedContent ?? string.Empty, cancellationToken);
             return Results.Ok(new { sessionId, step = "draft", saved = true });
         });
 
@@ -300,89 +282,6 @@ public static class WorkflowEndpoints
             {
                 SessionId = sessionId,
                 Step = "draft",
-                Prompt = preview.Prompt,
-                RagHitCount = preview.RagHitCount,
-                RagSnapshotId = preview.RagSnapshotId,
-                Warning = preview.Warning,
-            });
-        });
-
-        app.MapPost("/workflow/sessions/{sessionId}/steps/titlehook/generate", async (
-            string sessionId,
-            GenerateStepRequest request,
-            IWorkflowOrchestrator orchestrator,
-            CancellationToken cancellationToken) =>
-        {
-            var result = await orchestrator.GenerateStepAsync(
-                sessionId,
-                WorkflowStep.Step3_TitleHook,
-                request?.Regenerate ?? false,
-                cancellationToken);
-
-            return Results.Ok(new GenerateStepResponse
-            {
-                SessionId = sessionId,
-                Step = "titlehook",
-                Generated = result.Content,
-                RagHitCount = result.RagHitCount,
-                Model = result.Model,
-                GeneratedAt = result.GeneratedAt,
-                Warning = result.Warning,
-            });
-        });
-
-        app.MapPost("/workflow/sessions/{sessionId}/steps/titlehook/save", async (
-            string sessionId,
-            SaveStepRequest request,
-            IWorkflowOrchestrator orchestrator,
-            IHostEnvironment env,
-            HttpContext httpContext,
-            CancellationToken cancellationToken) =>
-        {
-            var validationError = ValidateTitleHook(request?.EditedContent, env, httpContext);
-            if (validationError is not null)
-            {
-                return validationError;
-            }
-
-            await orchestrator.SaveStepAsync(sessionId, WorkflowStep.Step3_TitleHook, request!.EditedContent, cancellationToken);
-            return Results.Ok(new { sessionId, step = "titlehook", saved = true });
-        });
-
-        app.MapPost("/workflow/sessions/{sessionId}/steps/titlehook/confirm", async (
-            string sessionId,
-            ConfirmStepRequest request,
-            IWorkflowOrchestrator orchestrator,
-            IHostEnvironment env,
-            HttpContext httpContext,
-            CancellationToken cancellationToken) =>
-        {
-            var validationError = ValidateTitleHook(request?.ConfirmedContent, env, httpContext);
-            if (validationError is not null)
-            {
-                return validationError;
-            }
-
-            var result = await orchestrator.ConfirmStepAsync(sessionId, WorkflowStep.Step3_TitleHook, request!.ConfirmedContent, cancellationToken);
-            return Results.Ok(new
-            {
-                sessionId,
-                step = "titlehook",
-                confirmed = true,
-                nextStep = MapStepName(result.NextStep),
-            });
-        });
-
-        app.MapPost("/workflow/sessions/{sessionId}/steps/titlehook/preview", async (
-            string sessionId,
-            IWorkflowOrchestrator orchestrator,
-            CancellationToken cancellationToken) =>
-        {
-            var preview = await orchestrator.PreviewStepAsync(sessionId, WorkflowStep.Step3_TitleHook, cancellationToken);
-            return Results.Ok(new PreviewPromptResponse
-            {
-                SessionId = sessionId,
-                Step = "titlehook",
                 Prompt = preview.Prompt,
                 RagHitCount = preview.RagHitCount,
                 RagSnapshotId = preview.RagSnapshotId,
@@ -501,35 +400,6 @@ public static class WorkflowEndpoints
                 ErrorCode = "INVALID_REQUEST",
                 Message = $"下書きは {MaxDraftLength} 文字以内で入力してください",
                 Details = env.IsDevelopment() ? $"Draft must be at most {MaxDraftLength} characters" : null,
-                RequestId = httpContext.TraceIdentifier,
-                IsRetryable = false,
-            });
-        }
-
-        return null;
-    }
-
-    private static IResult? ValidateTitleHook(string? content, IHostEnvironment env, HttpContext httpContext)
-    {
-        if (string.IsNullOrWhiteSpace(content))
-        {
-            return Results.BadRequest(new ErrorResponse
-            {
-                ErrorCode = "INVALID_REQUEST",
-                Message = "タイトルと導入部を入力してください",
-                Details = env.IsDevelopment() ? "TitleHook content is required" : null,
-                RequestId = httpContext.TraceIdentifier,
-                IsRetryable = false,
-            });
-        }
-
-        if (content.Length > 2200)
-        {
-            return Results.BadRequest(new ErrorResponse
-            {
-                ErrorCode = "INVALID_REQUEST",
-                Message = "タイトルと導入部は 2200 文字以内で入力してください",
-                Details = env.IsDevelopment() ? "TitleHook content is too long" : null,
                 RequestId = httpContext.TraceIdentifier,
                 IsRetryable = false,
             });

@@ -34,7 +34,7 @@ public sealed class WorkflowJourneyTests
     }
 
     [Test]
-    public async Task CompleteWorkflowJourney_OutlineToDraftToTitle()
+    public async Task CompleteWorkflowJourney_OutlineToDraft_Completes()
     {
         SkipIfMissingBaseUrl();
 
@@ -48,11 +48,6 @@ public sealed class WorkflowJourneyTests
 
         await page.WaitForURLAsync("**/workflow/draft/**");
         await page.FillAsync("textarea", new string('D', 150));
-        await page.ClickAsync("button:has-text('確定')");
-
-        await page.WaitForURLAsync("**/workflow/title/**");
-        await page.FillAsync("input.form-control", "最終タイトル");
-        await page.FillAsync("textarea", new string('H', 120));
         await page.ClickAsync("button:has-text('確定')");
 
         await page.Locator("text=現在のステップ: Completed").WaitForAsync();
@@ -88,7 +83,7 @@ public sealed class WorkflowJourneyTests
         var page = await browser.NewPageAsync();
 
         await CreateSessionAsync(page);
-        await page.ClickAsync("button:has-text('プロンプトをプレビュー')");
+        await page.ClickAsync("button:has-text('プロンプトを確認')");
         await page.Locator("text=この内容は機微情報を含みます").WaitForAsync();
     }
 
@@ -116,7 +111,7 @@ public sealed class WorkflowJourneyTests
     }
 
     [Test]
-    public async Task FinalStep_ShowsOneClickCopyButton()
+    public async Task CompletedWorkflow_ShowsLinkToTitleHookFeature()
     {
         SkipIfMissingBaseUrl();
 
@@ -131,13 +126,8 @@ public sealed class WorkflowJourneyTests
 
         await page.FillAsync("textarea", new string('D', 150));
         await page.ClickAsync("button:has-text('確定')");
-        await page.WaitForURLAsync("**/workflow/title/**");
 
-        await page.FillAsync("input.form-control", "コピー確認タイトル");
-        await page.FillAsync("textarea", new string('H', 120));
-        await page.ClickAsync("button:has-text('確定')");
-
-        await page.Locator("button:has-text('コピー')").WaitForAsync();
+        await page.Locator("a:has-text('別機能: タイトル・導入文案へ')").WaitForAsync();
     }
 
     private static async Task CreateSessionAsync(IPage page)

@@ -31,7 +31,7 @@ public sealed class WorkflowSession
         {
             WorkflowStep.Step1_Outline => true,
             WorkflowStep.Step2_Draft => !string.IsNullOrWhiteSpace(OutlineConfirmed),
-            WorkflowStep.Step3_TitleHook => !string.IsNullOrWhiteSpace(DraftConfirmed),
+            WorkflowStep.Step3_TitleHook => false,
             _ => false,
         };
     }
@@ -42,7 +42,7 @@ public sealed class WorkflowSession
         {
             WorkflowStep.Step1_Outline => !string.IsNullOrWhiteSpace(OutlineEdited) || !string.IsNullOrWhiteSpace(OutlineGenerated),
             WorkflowStep.Step2_Draft => !string.IsNullOrWhiteSpace(DraftEdited) || !string.IsNullOrWhiteSpace(DraftGenerated),
-            WorkflowStep.Step3_TitleHook => TitleHookSelected is not null || (TitleHookOptions?.Count > 0),
+            WorkflowStep.Step3_TitleHook => false,
             _ => false,
         };
     }
@@ -64,3 +64,4 @@ public sealed class WorkflowSession
         DeleteAt = LastAccessedAt.AddDays(retentionDays);
     }
 }
+

@@ -162,8 +162,8 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
             session.InitialInput,
             snapshot.Chunks,
             _styleCard,
-            session.OutlineConfirmed ?? session.OutlineEdited ?? session.OutlineGenerated,
-            session.DraftConfirmed ?? session.DraftEdited ?? session.DraftGenerated,
+            GetOutlineForPrompt(session, step),
+            GetDraftForPrompt(session, step),
             cancellationToken);
 
         var draft = await _llmClient.GenerateAsync(
@@ -209,8 +209,8 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
             session.InitialInput,
             snapshot.Chunks,
             _styleCard,
-            session.OutlineConfirmed ?? session.OutlineEdited ?? session.OutlineGenerated,
-            session.DraftConfirmed ?? session.DraftEdited ?? session.DraftGenerated,
+            GetOutlineForPrompt(session, step),
+            GetDraftForPrompt(session, step),
             cancellationToken);
 
         _logger.LogInformation("Workflow prompt preview generated. SessionId={SessionId} Step={Step}", sessionId, step);
@@ -300,11 +300,9 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
         switch (step)
         {
             case WorkflowStep.Step1_Outline:
-                _outlineValidator.ValidateOrThrow(editedContent, _options);
                 session.OutlineEdited = editedContent;
                 return;
             case WorkflowStep.Step2_Draft:
-                ValidateDraft(editedContent);
                 session.DraftEdited = editedContent;
                 return;
             case WorkflowStep.Step3_TitleHook:
@@ -334,8 +332,9 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
             case WorkflowStep.Step2_Draft:
                 ValidateDraft(confirmedContent);
                 session.DraftConfirmed = confirmedContent;
-                session.TransitionToStep(WorkflowStep.Step3_TitleHook, _options.SessionRetentionDays);
-                return WorkflowStep.Step3_TitleHook;
+                session.CurrentStep = WorkflowStep.Completed;
+                session.Touch(_options.SessionRetentionDays);
+                return WorkflowStep.Completed;
             case WorkflowStep.Step3_TitleHook:
                 var confirmed = string.IsNullOrWhiteSpace(confirmedContent)
                     ? session.TitleHookSelected ?? session.TitleHookOptions?.FirstOrDefault() ?? throw new InvalidStateTransitionException("TitleHook option is not selected.")
@@ -349,6 +348,19 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
             default:
                 throw new InvalidStateTransitionException($"Step {step} is not available yet.");
         }
+    }
+    private static string? GetOutlineForPrompt(WorkflowSession session, WorkflowStep step)
+    {
+        return step == WorkflowStep.Step2_Draft
+            ? session.OutlineConfirmed
+            : null;
+    }
+
+    private static string? GetDraftForPrompt(WorkflowSession session, WorkflowStep step)
+    {
+        return step == WorkflowStep.Step3_TitleHook
+            ? session.DraftConfirmed
+            : null;
     }
 
     private static void ValidateDraft(string content)
@@ -486,3 +498,5 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
         return handle;
     }
 }
+
+
