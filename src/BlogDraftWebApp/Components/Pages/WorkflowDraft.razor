@@ -32,9 +32,9 @@ else
                 </div>
             </div>
             <div class="col-4">
-                <div class="step @("Step3_TitleHook" == _currentStep ? "active" : (IsStepCompleted("Step3_TitleHook") ? "completed" : ""))">
+                <div class="step @("Completed" == _currentStep ? "active" : (IsStepCompleted("Completed") ? "completed" : ""))">
                     <div class="step-number">3</div>
-                    <div class="step-label">タイトル</div>
+                    <div class="step-label">完了</div>
                 </div>
             </div>
         </div>
@@ -46,8 +46,13 @@ else
     </div>
 
     <!-- Main Action -->
+    @if (_currentStep == "Step1_Outline")
+    {
+        <div class="alert alert-warning">先にアウトラインを確定してください。<a href="/workflow/outline/@SessionId">アウトラインに戻る</a></div>
+    }
+
     <div class="mb-4">
-        <button class="btn btn-primary btn-lg w-100" disabled="@_isBusy" @onclick="GenerateDraftAsync">
+        <button class="btn btn-primary btn-lg w-100" disabled="@(_isBusy || _currentStep == "Step1_Outline")" @onclick="GenerateDraftAsync">
             @(_isBusy ? "生成中..." : (string.IsNullOrWhiteSpace(_draftContent) ? "下書きを生成" : "再生成"))
         </button>
     </div>
@@ -75,17 +80,15 @@ else
     {
         <div class="mb-4">
             <button class="btn btn-success btn-lg w-100" disabled="@_isBusy || string.IsNullOrWhiteSpace(_draftContent)" @onclick="ConfirmDraftAsync">
-                確定して次へ進む → Step3: タイトル生成
+                下書きを確定して完了
             </button>
         </div>
     }
-    else if (_currentStep is "Step3_TitleHook" or "Completed")
+    else if (_currentStep is "Completed")
     {
         <div class="mb-4">
-            <div class="alert alert-info">下書きは確定済みです。タイトルステップへ進んでください。</div>
-            <button class="btn btn-outline-primary btn-lg w-100" disabled="@_isBusy" @onclick="NavigateToTitle">
-                タイトルへ進む
-            </button>
+            <div class="alert alert-info">下書きまで確定済みです。ワークフローは完了しています。</div>
+            <a class="btn btn-outline-primary btn-lg w-100" href="/title-hook">別機能: タイトル・導入文案へ</a>
         </div>
     }
 
@@ -95,7 +98,7 @@ else
         <div class="mt-3 d-flex flex-column gap-2">
             <button class="btn btn-outline-secondary" disabled="@_isBusy" @onclick="PreviewDraftAsync">プロンプトを確認</button>
             <button class="btn btn-outline-warning" disabled="@_isBusy" @onclick="RefreshRagAsync">RAG再検索</button>
-            <button class="btn btn-outline-secondary" disabled="@_isBusy || string.IsNullOrWhiteSpace(_draftContent)" @onclick="SaveDraftAsync">手動保存</button>
+            <button class="btn btn-outline-secondary" disabled="@_isBusy || string.IsNullOrWhiteSpace(_draftContent)" @onclick="() => SaveDraftAsync()">手動保存</button>
         </div>
     </details>
 }
@@ -157,9 +160,9 @@ else
     {
         return checkStep switch
         {
-            "Step1_Outline" => true,
-            "Step2_Draft" => _currentStep is "Step3_TitleHook" or "Completed",
-            "Step3_TitleHook" => _currentStep is "Completed",
+            "Step1_Outline" => _currentStep is not "Step1_Outline",
+            "Step2_Draft" => _currentStep is "Completed",
+            "Completed" => _currentStep is "Completed",
             _ => false
         };
     }
@@ -201,9 +204,9 @@ else
                 if (payload is not null)
                 {
                     _currentStep = payload.CurrentStep;
-                    _draftContent = payload.DraftEdited
+                    _draftContent = payload.DraftConfirmed
+                        ?? payload.DraftEdited
                         ?? payload.DraftGenerated
-                        ?? payload.DraftConfirmed
                         ?? string.Empty;
                     return;
                 }
@@ -233,7 +236,7 @@ else
         try
         {
             var http = CreateHttpClient();
-            var response = await http.PostAsJsonAsync($"/workflow/sessions/{SessionId}/steps/draft/generate", new GenerateStepRequest { Regenerate = false });
+            var response = await http.PostAsJsonAsync($"/workflow/sessions/{SessionId}/steps/draft/generate", new GenerateStepRequest { Regenerate = !string.IsNullOrWhiteSpace(_draftContent) });
             if (response.StatusCode == HttpStatusCode.OK)
             {
                 var payload = await response.Content.ReadFromJsonAsync<GenerateStepResponse>();
@@ -289,16 +292,19 @@ else
         }
     }
 
-    private async Task SaveDraftAsync()
+        private async Task SaveDraftAsync(bool userInitiated = true)
     {
         if (string.IsNullOrWhiteSpace(SessionId))
         {
             return;
         }
 
-        _isBusy = true;
-        _error = null;
-        _autoSaveMessage = null;
+        if (userInitiated)
+        {
+            _isBusy = true;
+            _error = null;
+            _autoSaveMessage = null;
+        }
 
         try
         {
@@ -310,19 +316,30 @@ else
 
             if (response.StatusCode == HttpStatusCode.OK)
             {
-                _autoSaveMessage = "保存しました";
+                _autoSaveMessage = userInitiated ? "保存しました" : "自動保存しました";
                 return;
             }
 
-            _error = await response.Content.ReadFromJsonAsync<ErrorResponse>();
-            _error ??= new ErrorResponse { Message = "保存に失敗しました", IsRetryable = false };
+            var apiError = await response.Content.ReadFromJsonAsync<ErrorResponse>()
+                ?? new ErrorResponse { Message = "保存に失敗しました", IsRetryable = false };
+
+            if (userInitiated)
+            {
+                _error = apiError;
+            }
+            else
+            {
+                _autoSaveMessage = "自動保存に失敗しました";
+            }
         }
         finally
         {
-            _isBusy = false;
+            if (userInitiated)
+            {
+                _isBusy = false;
+            }
         }
     }
-
     private async Task ConfirmDraftAsync()
     {
         if (string.IsNullOrWhiteSpace(SessionId))
@@ -343,9 +360,8 @@ else
 
             if (response.StatusCode == HttpStatusCode.OK)
             {
-                _currentStep = "Step3_TitleHook";
+                _currentStep = "Completed";
                 _showPreviewModal = false;
-                Nav.NavigateTo($"/workflow/title/{SessionId}");
                 return;
             }
 
@@ -416,16 +432,6 @@ else
         }
     }
 
-    private void NavigateToTitle()
-    {
-        if (string.IsNullOrWhiteSpace(SessionId))
-        {
-            return;
-        }
-
-        Nav.NavigateTo($"/workflow/title/{SessionId}");
-    }
-
     private void ScheduleAutoSave()
     {
         if (string.IsNullOrWhiteSpace(SessionId))
@@ -444,7 +450,7 @@ else
                 await Task.Delay(TimeSpan.FromMilliseconds(800), cts.Token);
                 if (!cts.Token.IsCancellationRequested)
                 {
-                    await InvokeAsync(SaveDraftAsync);
+                    await InvokeAsync(() => SaveDraftAsync(userInitiated: false));
                 }
             }
             catch (OperationCanceledException)
@@ -460,3 +466,10 @@ else
         return http;
     }
 }
+
+
+
+
+
+
+

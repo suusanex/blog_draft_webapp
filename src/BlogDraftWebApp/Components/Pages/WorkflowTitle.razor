@@ -1,7 +1,8 @@
-@page "/workflow/title/{SessionId}"
+@page "/title-hook"
 
 @using System.Net
 @using System.Net.Http.Json
+@using System.ComponentModel.DataAnnotations
 @using BlogDraftWebApp.Api.Models
 @using BlogDraftWebApp.Core.Models
 @using BlogDraftWebApp.Services
@@ -9,128 +10,80 @@
 @inject NavigationManager Nav
 @inject ClipboardService ClipboardService
 
-<PageTitle>ワークフロー生成（タイトル）</PageTitle>
+<PageTitle>タイトル・導入文案生成</PageTitle>
 
-<h1>ワークフロー生成（タイトル＆導入部）</h1>
+<h1>タイトル・冒頭段落案生成</h1>
+<p class="text-muted">完成した本文を入力して、タイトルと冒頭段落の案を作成します（ワークフローとは独立した機能です）。</p>
 
-@if (string.IsNullOrWhiteSpace(SessionId))
-{
-    <div class="alert alert-warning">セッションIDが指定されていません</div>
-}
-else
-{
-    <!-- Progress Stepper -->
-    <div class="workflow-progress mb-4">
-        <div class="row text-center">
-            <div class="col-4">
-                <div class="step @("Step1_Outline" == _currentStep ? "active" : (IsStepCompleted("Step1_Outline") ? "completed" : ""))">
-                    <div class="step-number">1</div>
-                    <div class="step-label">アウトライン</div>
-                </div>
-            </div>
-            <div class="col-4">
-                <div class="step @("Step2_Draft" == _currentStep ? "active" : (IsStepCompleted("Step2_Draft") ? "completed" : ""))">
-                    <div class="step-number">2</div>
-                    <div class="step-label">下書き</div>
-                </div>
-            </div>
-            <div class="col-4">
-                <div class="step @("Step3_TitleHook" == _currentStep ? "active" : (IsStepCompleted("Step3_TitleHook") ? "completed" : ""))">
-                    <div class="step-number">3</div>
-                    <div class="step-label">タイトル</div>
-                </div>
-            </div>
-        </div>
-    </div>
+<EditForm Model="_model" OnValidSubmit="GenerateTitleHookAsync">
+    <DataAnnotationsValidator />
 
     <div class="mb-3">
-        <div>セッションID: @SessionId</div>
-        <div>現在のステップ: @_currentStep</div>
+        <label class="form-label">本文</label>
+        <InputTextArea class="form-control" Value="@_model.ArticleBody" ValueChanged="OnArticleBodyChanged" ValueExpression="(() => _model.ArticleBody)" rows="14" />
+        <ValidationMessage For="() => _model.ArticleBody" />
     </div>
 
-    <!-- Main Action -->
-    <div class="mb-4 d-flex gap-2">
-        <button class="btn btn-primary btn-lg flex-grow-1" disabled="@_isBusy" @onclick="GenerateTitleHookAsync">
-            @(_isBusy ? "生成中..." : (_options.Count > 0 ? "再生成" : "タイトル案を生成（３案）"))
-        </button>
+    <div class="d-flex gap-2">
+        <button class="btn btn-primary" type="submit" disabled="@IsGenerateDisabled">@(_isBusy ? "生成中..." : "案を生成")</button>
+        <button class="btn btn-outline-secondary" type="button" disabled="@IsGenerateDisabled" @onclick="PreviewTitleHookAsync">プロンプトを確認</button>
     </div>
+</EditForm>
 
-    @if (_refreshDiff is not null)
-    {
-        <div class="alert alert-info">
-            <div>RAG差分: +@_refreshDiff.AddedChunkCount / -@_refreshDiff.RemovedChunkCount (rate=@_refreshDiff.ChangeRate)</div>
-            <button class="btn btn-sm btn-primary mt-2" disabled="@_isBusy" @onclick="ConfirmRagRefreshAsync">この差分を採用</button>
-        </div>
-    }
+@if (!string.IsNullOrWhiteSpace(_warning))
+{
+    <div class="alert alert-warning mt-3">@_warning</div>
+}
 
-    @if (_options.Count > 0)
-    {
-        <h2 class="h5">タイトル案（３案）</h2>
-        <div class="row g-2 mb-3">
-            @foreach (var option in _options)
-            {
-                <div class="col-md-4">
-                    <div class="card h-100">
-                        <div class="card-body">
-                            <div class="form-check">
-                                <input class="form-check-input" type="radio" name="titleOption" checked="@(option.OptionIndex == _selectedOptionIndex)" @onchange="() => SelectOption(option)" />
-                                <label class="form-check-label">案 @option.OptionIndex</label>
-                            </div>
-                            <div class="fw-bold mt-2">@option.Title</div>
-                            <div class="small text-muted mt-2">@option.HookText</div>
+@if (_error is not null)
+{
+    <div class="alert alert-danger mt-3">
+        <div>@_error.Message</div>
+        @if (_error.IsRetryable)
+        {
+            <button class="btn btn-outline-danger mt-2" @onclick="GenerateTitleHookAsync">再試行</button>
+        }
+    </div>
+}
+
+@if (_options.Count > 0)
+{
+    <h2 class="h5 mt-4">生成結果（3案）</h2>
+    <div class="row g-2 mb-3">
+        @foreach (var option in _options)
+        {
+            <div class="col-md-4">
+                <div class="card h-100">
+                    <div class="card-body">
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="titleOption" checked="@(option.OptionIndex == _selectedOptionIndex)" @onchange="() => SelectOption(option)" />
+                            <label class="form-check-label">案 @option.OptionIndex</label>
                         </div>
+                        <div class="fw-bold mt-2">@option.Title</div>
+                        <div class="small text-muted mt-2">@option.HookText</div>
                     </div>
                 </div>
-            }
-        </div>
-    }
+            </div>
+        }
+    </div>
 
-    <!-- Edit Area -->
     <div class="mb-3">
-        <label class="form-label">タイトル</label>
+        <label class="form-label">タイトル（編集）</label>
         <InputText class="form-control" Value="@_title" ValueChanged="OnTitleChanged" ValueExpression="(() => _title)" />
     </div>
 
-    <div class="mb-4">
-        <label class="form-label">導入部</label>
-        <InputTextArea class="form-control" Value="@_hookText" ValueChanged="OnHookChanged" ValueExpression="(() => _hookText)" rows="10" />
+    <div class="mb-3">
+        <label class="form-label">冒頭段落（編集）</label>
+        <InputTextArea class="form-control" Value="@_hookText" ValueChanged="OnHookChanged" ValueExpression="(() => _hookText)" rows="8" />
     </div>
 
-    <!-- Confirm and Complete -->
-    @if (_currentStep == "Step3_TitleHook")
+    <button class="btn btn-outline-secondary" disabled="@_isBusy || string.IsNullOrWhiteSpace(_title) || string.IsNullOrWhiteSpace(_hookText)" @onclick="CopyFinalAsync">コピー</button>
+    @if (!string.IsNullOrWhiteSpace(_copyMessage))
     {
-        <div class="mb-4">
-            <button class="btn btn-success btn-lg w-100" disabled="@_isBusy || string.IsNullOrWhiteSpace(_title) || string.IsNullOrWhiteSpace(_hookText)" @onclick="ConfirmTitleHookAsync">
-                確定して完了
-            </button>
-        </div>
+        <div class="text-success mt-2">@_copyMessage</div>
     }
-    else if (_currentStep == "Completed" && !string.IsNullOrWhiteSpace(_title) && !string.IsNullOrWhiteSpace(_hookText))
-    {
-        <div class="mb-4">
-            <div class="alert alert-success">✅ 全ステップが完了しました！</div>
-            <button class="btn btn-outline-secondary btn-lg w-100" disabled="@_isBusy" @onclick="CopyFinalAsync">
-                コピー
-            </button>
-            @if (!string.IsNullOrWhiteSpace(_copyMessage))
-            {
-                <div class="text-success mt-2">@_copyMessage</div>
-            }
-        </div>
-    }
-
-    <!-- Auxiliary Actions (Collapsible) -->
-    <details class="mb-3">
-        <summary class="btn btn-link">▼ 詳細オプション</summary>
-        <div class="mt-3 d-flex flex-column gap-2">
-            <button class="btn btn-outline-secondary" disabled="@_isBusy" @onclick="PreviewTitleHookAsync">プロンプトを確認</button>
-            <button class="btn btn-outline-warning" disabled="@_isBusy" @onclick="RefreshRagAsync">RAG再検索</button>
-            <button class="btn btn-outline-secondary" disabled="@_isBusy || string.IsNullOrWhiteSpace(_title) || string.IsNullOrWhiteSpace(_hookText)" @onclick="SaveTitleHookAsync">手動保存</button>
-        </div>
-    </details>
 }
 
-<!-- Preview Modal -->
 @if (_showPreviewModal)
 {
     <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
@@ -152,59 +105,32 @@ else
     </div>
 }
 
-@if (!string.IsNullOrWhiteSpace(_warning))
-{
-    <div class="alert alert-warning mt-3">@_warning</div>
-}
-
-@if (_error is not null)
-{
-    <div class="alert alert-danger mt-3">
-        <div>@_error.Message</div>
-        @if (_error.IsRetryable)
-        {
-            <button class="btn btn-outline-danger mt-2" @onclick="GenerateTitleHookAsync">再試行</button>
-        }
-    </div>
-}
-
 @code {
-    [Parameter]
-    public string? SessionId { get; set; }
+    private sealed class TitleHookViewModel
+    {
+        [Required(ErrorMessage = "本文を入力してください")]
+        [MinLength(100, ErrorMessage = "本文は 100 文字以上入力してください")]
+        [MaxLength(50000, ErrorMessage = "本文は 50000 文字以内で入力してください")]
+        public string ArticleBody { get; set; } = string.Empty;
+    }
 
-    private string _currentStep = "Step3_TitleHook";
+    private TitleHookViewModel _model = new();
     private List<TitleHook> _options = new();
     private int? _selectedOptionIndex;
     private string _title = string.Empty;
     private string _hookText = string.Empty;
-    private string? _promptPreview;
     private string? _warning;
     private string? _copyMessage;
-    private RefreshRagSnapshotResponse? _refreshDiff;
+    private string? _promptPreview;
     private ErrorResponse? _error;
     private bool _isBusy;
     private bool _showPreviewModal;
 
-    private bool IsStepCompleted(string checkStep)
-    {
-        return checkStep switch
-        {
-            "Step1_Outline" => true,
-            "Step2_Draft" => true,
-            "Step3_TitleHook" => _currentStep is "Completed",
-            _ => false
-        };
-    }
+    private bool IsGenerateDisabled => _isBusy || string.IsNullOrWhiteSpace(_model.ArticleBody);
 
-    private void ClosePreviewModal()
+    private void OnArticleBodyChanged(string value)
     {
-        _showPreviewModal = false;
-        _promptPreview = null;
-    }
-
-    protected override async Task OnParametersSetAsync()
-    {
-        await LoadSessionAsync();
+        _model.ArticleBody = value;
     }
 
     private void OnTitleChanged(string value)
@@ -224,81 +150,35 @@ else
         _hookText = option.HookText;
     }
 
-    private async Task LoadSessionAsync()
-    {
-        if (string.IsNullOrWhiteSpace(SessionId))
-        {
-            return;
-        }
-
-        _isBusy = true;
-        _error = null;
-
-        try
-        {
-            var http = CreateHttpClient();
-            var response = await http.GetAsync($"/workflow/sessions/{SessionId}");
-            if (response.StatusCode == HttpStatusCode.OK)
-            {
-                var payload = await response.Content.ReadFromJsonAsync<GetSessionResponse>();
-                if (payload is not null)
-                {
-                    _currentStep = payload.CurrentStep;
-                    _options = payload.TitleHookOptions ?? new List<TitleHook>();
-
-                    var selected = payload.TitleHookSelected
-                        ?? payload.TitleHookConfirmed
-                        ?? _options.FirstOrDefault();
-
-                    if (selected is not null)
-                    {
-                        _selectedOptionIndex = selected.OptionIndex;
-                        _title = selected.Title;
-                        _hookText = selected.HookText;
-                    }
-
-                    return;
-                }
-            }
-
-            _error = await response.Content.ReadFromJsonAsync<ErrorResponse>();
-            _error ??= new ErrorResponse { Message = "セッションの読み込みに失敗しました", IsRetryable = false };
-        }
-        finally
-        {
-            _isBusy = false;
-        }
-    }
-
     private async Task GenerateTitleHookAsync()
     {
-        await GenerateTitleHookCoreAsync(false);
-    }
-
-    private async Task RegenerateTitleHookAsync()
-    {
-        await GenerateTitleHookCoreAsync(true);
-    }
-
-    private async Task GenerateTitleHookCoreAsync(bool regenerate)
-    {
-        if (string.IsNullOrWhiteSpace(SessionId))
-        {
-            return;
-        }
-
         _isBusy = true;
         _error = null;
         _warning = null;
-        _promptPreview = null;
+        _copyMessage = null;
 
         try
         {
             var http = CreateHttpClient();
-            var response = await http.PostAsJsonAsync($"/workflow/sessions/{SessionId}/steps/titlehook/generate", new GenerateStepRequest { Regenerate = regenerate });
+            var response = await http.PostAsJsonAsync("/titlehook", new GenerateTitleHookRequest
+            {
+                ArticleBody = _model.ArticleBody,
+            });
+
             if (response.StatusCode == HttpStatusCode.OK)
             {
-                await LoadSessionAsync();
+                var payload = await response.Content.ReadFromJsonAsync<GenerateTitleHookResponse>();
+                _options = payload?.Options ?? new List<TitleHook>();
+                _warning = payload?.Warning;
+
+                var first = _options.FirstOrDefault();
+                if (first is not null)
+                {
+                    _selectedOptionIndex = first.OptionIndex;
+                    _title = first.Title;
+                    _hookText = first.HookText;
+                }
+
                 return;
             }
 
@@ -313,11 +193,6 @@ else
 
     private async Task PreviewTitleHookAsync()
     {
-        if (string.IsNullOrWhiteSpace(SessionId))
-        {
-            return;
-        }
-
         _isBusy = true;
         _error = null;
         _warning = null;
@@ -327,12 +202,15 @@ else
         try
         {
             var http = CreateHttpClient();
-            var response = await http.PostAsync($"/workflow/sessions/{SessionId}/steps/titlehook/preview", content: null);
+            var response = await http.PostAsJsonAsync("/titlehook/preview", new GenerateTitleHookRequest
+            {
+                ArticleBody = _model.ArticleBody,
+            });
+
             if (response.StatusCode == HttpStatusCode.OK)
             {
                 var payload = await response.Content.ReadFromJsonAsync<PreviewPromptResponse>();
                 _promptPreview = payload?.Prompt;
-                _warning = payload?.Warning;
                 _showPreviewModal = true;
                 return;
             }
@@ -346,137 +224,17 @@ else
         }
     }
 
-    private async Task SaveTitleHookAsync()
+    private void ClosePreviewModal()
     {
-        if (string.IsNullOrWhiteSpace(SessionId))
-        {
-            return;
-        }
-
-        _isBusy = true;
-        _error = null;
-
-        try
-        {
-            var http = CreateHttpClient();
-            var response = await http.PostAsJsonAsync($"/workflow/sessions/{SessionId}/steps/titlehook/save", new SaveStepRequest
-            {
-                EditedContent = BuildTitleHookContent(),
-            });
-
-            if (response.StatusCode == HttpStatusCode.OK)
-            {
-                return;
-            }
-
-            _error = await response.Content.ReadFromJsonAsync<ErrorResponse>();
-            _error ??= new ErrorResponse { Message = "保存に失敗しました", IsRetryable = false };
-        }
-        finally
-        {
-            _isBusy = false;
-        }
-    }
-
-    private async Task ConfirmTitleHookAsync()
-    {
-        if (string.IsNullOrWhiteSpace(SessionId))
-        {
-            return;
-        }
-
-        _isBusy = true;
-        _error = null;
-
-        try
-        {
-            var http = CreateHttpClient();
-            var response = await http.PostAsJsonAsync($"/workflow/sessions/{SessionId}/steps/titlehook/confirm", new ConfirmStepRequest
-            {
-                ConfirmedContent = BuildTitleHookContent(),
-            });
-
-            if (response.StatusCode == HttpStatusCode.OK)
-            {
-                _currentStep = "Completed";
-                _showPreviewModal = false;
-                return;
-            }
-
-            _error = await response.Content.ReadFromJsonAsync<ErrorResponse>();
-            _error ??= new ErrorResponse { Message = "確定に失敗しました", IsRetryable = false };
-        }
-        finally
-        {
-            _isBusy = false;
-        }
-    }
-
-    private async Task RefreshRagAsync()
-    {
-        if (string.IsNullOrWhiteSpace(SessionId))
-        {
-            return;
-        }
-
-        _isBusy = true;
-        _error = null;
-
-        try
-        {
-            var http = CreateHttpClient();
-            var response = await http.PostAsync($"/workflow/sessions/{SessionId}/rag/refresh", content: null);
-            if (response.StatusCode == HttpStatusCode.OK)
-            {
-                _refreshDiff = await response.Content.ReadFromJsonAsync<RefreshRagSnapshotResponse>();
-                return;
-            }
-
-            _error = await response.Content.ReadFromJsonAsync<ErrorResponse>();
-            _error ??= new ErrorResponse { Message = "RAG再検索に失敗しました", IsRetryable = false };
-        }
-        finally
-        {
-            _isBusy = false;
-        }
-    }
-
-    private async Task ConfirmRagRefreshAsync()
-    {
-        if (string.IsNullOrWhiteSpace(SessionId))
-        {
-            return;
-        }
-
-        _isBusy = true;
-        _error = null;
-
-        try
-        {
-            var http = CreateHttpClient();
-            var response = await http.PostAsync($"/workflow/sessions/{SessionId}/rag/refresh/confirm", content: null);
-            if (response.StatusCode == HttpStatusCode.OK)
-            {
-                _refreshDiff = null;
-                return;
-            }
-
-            _error = await response.Content.ReadFromJsonAsync<ErrorResponse>();
-            _error ??= new ErrorResponse { Message = "RAG再検索確定に失敗しました", IsRetryable = false };
-        }
-        finally
-        {
-            _isBusy = false;
-        }
+        _showPreviewModal = false;
+        _promptPreview = null;
     }
 
     private async Task CopyFinalAsync()
     {
-        await ClipboardService.CopyTextAsync(BuildTitleHookContent());
+        await ClipboardService.CopyTextAsync($"{_title}\n\n{_hookText}");
         _copyMessage = "コピーしました";
     }
-
-    private string BuildTitleHookContent() => $"{_title}\n\n{_hookText}";
 
     private HttpClient CreateHttpClient()
     {
@@ -485,3 +243,6 @@ else
         return http;
     }
 }
+
+
+

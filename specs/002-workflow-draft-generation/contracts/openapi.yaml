@@ -1,7 +1,12 @@
 openapi: 3.0.3
 info:
-  title: Workflow API
-  version: 0.1.0
+  title: Blog Draft Workflow API
+  version: 0.2.0
+  description: |
+    Current behavior (2026-03-06):
+    - Workflow is 2 steps: outline -> draft -> completed.
+    - Title/hook generation is a standalone feature via /titlehook.
+
 paths:
   /workflow/sessions:
     post:
@@ -11,14 +16,16 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                overview:
-                  type: string
-              required: [overview]
+              $ref: '#/components/schemas/CreateSessionRequest'
       responses:
         '201':
           description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateSessionResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
     get:
       summary: List workflow sessions
       parameters:
@@ -26,105 +33,523 @@ paths:
           name: page
           schema:
             type: integer
+            minimum: 1
+            default: 1
         - in: query
           name: pageSize
           schema:
             type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
       responses:
         '200':
           description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionListResponse'
+
   /workflow/sessions/{sessionId}:
+    parameters:
+      - in: path
+        name: sessionId
+        required: true
+        schema:
+          type: string
     get:
       summary: Get workflow session
-      parameters:
-        - in: path
-          name: sessionId
-          required: true
-          schema:
-            type: string
       responses:
         '200':
           description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetSessionResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '410':
+          $ref: '#/components/responses/Expired'
     delete:
       summary: Delete workflow session
-      parameters:
-        - in: path
-          name: sessionId
-          required: true
-          schema:
-            type: string
       responses:
         '204':
           description: No Content
-  /workflow/sessions/{sessionId}/steps/outline/generate:
+
+  /workflow/sessions/{sessionId}/rag/refresh:
     post:
-      summary: Generate outline
+      summary: Refresh RAG snapshot (pending)
+      parameters:
+        - in: path
+          name: sessionId
+          required: true
+          schema:
+            type: string
       responses:
         '200':
           description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RefreshRagSnapshotResponse'
+
+  /workflow/sessions/{sessionId}/rag/refresh/confirm:
+    post:
+      summary: Confirm refreshed RAG snapshot
+      parameters:
+        - in: path
+          name: sessionId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RefreshRagSnapshotResponse'
+
+  /workflow/sessions/{sessionId}/steps/outline/generate:
+    post:
+      summary: Generate outline (step 1)
+      parameters:
+        - in: path
+          name: sessionId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenerateStepRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenerateStepResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
   /workflow/sessions/{sessionId}/steps/outline/preview:
     post:
       summary: Preview outline prompt
+      parameters:
+        - in: path
+          name: sessionId
+          required: true
+          schema:
+            type: string
       responses:
         '200':
           description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PreviewPromptResponse'
+
   /workflow/sessions/{sessionId}/steps/outline/save:
     post:
-      summary: Save outline
+      summary: Save edited outline
+      parameters:
+        - in: path
+          name: sessionId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SaveStepRequest'
       responses:
         '200':
           description: OK
+
   /workflow/sessions/{sessionId}/steps/outline/confirm:
     post:
-      summary: Confirm outline
+      summary: Confirm outline and move to step 2
+      parameters:
+        - in: path
+          name: sessionId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfirmStepRequest'
       responses:
         '200':
           description: OK
+
   /workflow/sessions/{sessionId}/steps/draft/generate:
     post:
-      summary: Generate draft
+      summary: Generate draft (step 2)
+      parameters:
+        - in: path
+          name: sessionId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenerateStepRequest'
       responses:
         '200':
           description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenerateStepResponse'
+
   /workflow/sessions/{sessionId}/steps/draft/preview:
     post:
       summary: Preview draft prompt
+      parameters:
+        - in: path
+          name: sessionId
+          required: true
+          schema:
+            type: string
       responses:
         '200':
           description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PreviewPromptResponse'
+
   /workflow/sessions/{sessionId}/steps/draft/save:
     post:
-      summary: Save draft
+      summary: Save edited draft
+      parameters:
+        - in: path
+          name: sessionId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SaveStepRequest'
       responses:
         '200':
           description: OK
+
   /workflow/sessions/{sessionId}/steps/draft/confirm:
     post:
-      summary: Confirm draft
+      summary: Confirm draft and complete workflow
+      parameters:
+        - in: path
+          name: sessionId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfirmStepRequest'
       responses:
         '200':
           description: OK
-  /workflow/sessions/{sessionId}/steps/titlehook/generate:
+
+  /titlehook/preview:
     post:
-      summary: Generate title and hook options
+      summary: Preview standalone title/hook prompt
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenerateTitleHookRequest'
       responses:
         '200':
           description: OK
-  /workflow/sessions/{sessionId}/steps/titlehook/preview:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PreviewPromptResponse'
+
+  /titlehook:
     post:
-      summary: Preview title and hook prompt
+      summary: Generate standalone title/hook options
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenerateTitleHookRequest'
       responses:
         '200':
           description: OK
-  /workflow/sessions/{sessionId}/steps/titlehook/save:
-    post:
-      summary: Save title and hook
-      responses:
-        '200':
-          description: OK
-  /workflow/sessions/{sessionId}/steps/titlehook/confirm:
-    post:
-      summary: Confirm title and hook
-      responses:
-        '200':
-          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenerateTitleHookResponse'
+
+components:
+  responses:
+    BadRequest:
+      description: Bad Request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: Not Found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Expired:
+      description: Session Expired
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+  schemas:
+    CreateSessionRequest:
+      type: object
+      required: [overview]
+      properties:
+        overview:
+          type: string
+
+    CreateSessionResponse:
+      type: object
+      properties:
+        sessionId:
+          type: string
+        currentStep:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        deleteAt:
+          type: string
+          format: date-time
+
+    GenerateStepRequest:
+      type: object
+      properties:
+        regenerate:
+          type: boolean
+
+    GenerateStepResponse:
+      type: object
+      properties:
+        sessionId:
+          type: string
+        step:
+          type: string
+        generated:
+          type: string
+        ragHitCount:
+          type: integer
+        model:
+          type: string
+        generatedAt:
+          type: string
+          format: date-time
+        warning:
+          type: string
+          nullable: true
+        outlineMaxOutputTokens:
+          type: integer
+          nullable: true
+
+    SaveStepRequest:
+      type: object
+      required: [editedContent]
+      properties:
+        editedContent:
+          type: string
+
+    ConfirmStepRequest:
+      type: object
+      required: [confirmedContent]
+      properties:
+        confirmedContent:
+          type: string
+
+    PreviewPromptResponse:
+      type: object
+      properties:
+        sessionId:
+          type: string
+          nullable: true
+        step:
+          type: string
+          nullable: true
+        prompt:
+          type: string
+        ragHitCount:
+          type: integer
+        ragSnapshotId:
+          type: string
+          nullable: true
+        warning:
+          type: string
+          nullable: true
+
+    RefreshRagSnapshotResponse:
+      type: object
+      properties:
+        sessionId:
+          type: string
+        previousSnapshotId:
+          type: string
+        newSnapshotId:
+          type: string
+        addedChunkCount:
+          type: integer
+        removedChunkCount:
+          type: integer
+        changeRate:
+          type: number
+          format: double
+        confirmed:
+          type: boolean
+
+    SessionSummaryItem:
+      type: object
+      properties:
+        sessionId:
+          type: string
+        currentStep:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        lastAccessedAt:
+          type: string
+          format: date-time
+        deleteAt:
+          type: string
+          format: date-time
+
+    SessionListResponse:
+      type: object
+      properties:
+        sessions:
+          type: array
+          items:
+            $ref: '#/components/schemas/SessionSummaryItem'
+        page:
+          type: integer
+        pageSize:
+          type: integer
+
+    TitleHook:
+      type: object
+      properties:
+        title:
+          type: string
+        hookText:
+          type: string
+        optionIndex:
+          type: integer
+          nullable: true
+
+    GetSessionResponse:
+      type: object
+      properties:
+        sessionId:
+          type: string
+        currentStep:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        lastAccessedAt:
+          type: string
+          format: date-time
+        deleteAt:
+          type: string
+          format: date-time
+        initialInput:
+          type: string
+        ragSnapshotId:
+          type: string
+          nullable: true
+        outlineGenerated:
+          type: string
+          nullable: true
+        outlineEdited:
+          type: string
+          nullable: true
+        outlineConfirmed:
+          type: string
+          nullable: true
+        draftGenerated:
+          type: string
+          nullable: true
+        draftEdited:
+          type: string
+          nullable: true
+        draftConfirmed:
+          type: string
+          nullable: true
+        titleHookOptions:
+          type: array
+          nullable: true
+          items:
+            $ref: '#/components/schemas/TitleHook'
+        titleHookSelected:
+          $ref: '#/components/schemas/TitleHook'
+        titleHookConfirmed:
+          $ref: '#/components/schemas/TitleHook'
+
+    GenerateTitleHookRequest:
+      type: object
+      required: [articleBody]
+      properties:
+        articleBody:
+          type: string
+
+    GenerateTitleHookResponse:
+      type: object
+      properties:
+        options:
+          type: array
+          items:
+            $ref: '#/components/schemas/TitleHook'
+        model:
+          type: string
+        generatedAt:
+          type: string
+          format: date-time
+        warning:
+          type: string
+          nullable: true
+
+    ErrorResponse:
+      type: object
+      properties:
+        errorCode:
+          type: string
+        message:
+          type: string
+        details:
+          type: string
+          nullable: true
+        requestId:
+          type: string
+        isRetryable:
+          type: boolean

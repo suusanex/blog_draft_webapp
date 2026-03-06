@@ -22,7 +22,14 @@ builder.Host.ConfigureAppConfiguration((context, config) =>
 
     if (context.HostingEnvironment.IsDevelopment())
     {
-        config.AddUserSecrets<Program>(optional: true);
+        try
+        {
+            config.AddUserSecrets<Program>(optional: true);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // Test/sandbox environments may not allow access to the user secrets file.
+        }
     }
 
     config.AddEnvironmentVariables();
@@ -146,7 +153,7 @@ app.Use(async (context, next) =>
         return;
     }
 
-    if (path.StartsWith("/draft", StringComparison.OrdinalIgnoreCase))
+    if (path.StartsWith("/draft", StringComparison.OrdinalIgnoreCase) || path.StartsWith("/titlehook", StringComparison.OrdinalIgnoreCase))
     {
         var env = context.RequestServices.GetRequiredService<IHostEnvironment>();
         context.Response.StatusCode = StatusCodes.Status500InternalServerError;
@@ -167,6 +174,9 @@ app.Use(async (context, next) =>
 
 app.UseAntiforgery();
 
+app.MapGet("/workflow/title", () => Results.Redirect("/title-hook"));
+app.MapGet("/workflow/title/{*rest}", () => Results.Redirect("/title-hook"));
+
 app.MapStaticAssets();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
@@ -174,6 +184,7 @@ app.MapRazorComponents<App>()
 app.MapHealthEndpoints();
 app.MapDraftEndpoints();
 app.MapWorkflowEndpoints();
+app.MapTitleHookEndpoints();
 
 app.Run();
 

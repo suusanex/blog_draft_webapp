@@ -22,7 +22,7 @@ public sealed class WorkflowSessionTests
         Assert.That(session.CanGenerateStep(WorkflowStep.Step2_Draft), Is.True);
 
         session.DraftConfirmed = "draft";
-        Assert.That(session.CanGenerateStep(WorkflowStep.Step3_TitleHook), Is.True);
+        Assert.That(session.CanGenerateStep(WorkflowStep.Step3_TitleHook), Is.False);
     }
 
     [Test]
@@ -38,3 +38,5 @@ public sealed class WorkflowSessionTests
         Assert.That(() => session.TransitionToStep(WorkflowStep.Step2_Draft, 30), Throws.TypeOf<InvalidStateTransitionException>());
     }
 }
+
+

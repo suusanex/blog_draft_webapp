@@ -1,5 +1,18 @@
 # Tasks: ワークフロー型ブログ下書き生成（段階生成）
 
+## 2026-03-06 Revision (Current Behavior)
+
+- ワークフロー本体は **Step1: アウトライン** と **Step2: 下書き** の2段階です。
+- Step2（下書き）確定時点で `Completed` へ遷移します。
+- タイトル/冒頭段落案は **独立機能**（UI: `/title-hook`, API: `/titlehook`, `/titlehook/preview`）として提供し、WorkflowSession を引き継ぎません。
+- 本節以降に残る旧仕様（ワークフロー内 Step3 タイトル生成）記述は、上記改訂内容で読み替えてください。
+
+## Canonical Task Scope (Authoritative)
+
+- ワークフロー本体の完了条件は Step2（下書き）確定である。
+- タイトル/冒頭段落案は独立機能として実装・検証する（WorkflowSession 非依存）。
+- ワークフローと独立機能のUI導線は分離し、誤って同一セッション継続に見えないことを確認対象に含める。
+
 **Input**: Design documents from `/specs/002-workflow-draft-generation/`
 **Prerequisites**: plan.md (✅), spec.md (✅), data-model.md (plan.md内に含む), contracts/ (plan.md内に含む)
 
@@ -470,3 +483,4 @@ Task T017: SessionNotFoundException.cs
 - **Independent Testing**: 各ユーザーストーリー完了時点でCheckpoint設定
 
 **Suggested First Sprint**: Phase 1-4 (Setup → Foundational → US1 → US4) = MVP delivery
+

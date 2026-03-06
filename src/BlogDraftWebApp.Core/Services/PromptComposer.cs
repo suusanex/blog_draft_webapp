@@ -208,6 +208,21 @@ public sealed class PromptComposer : IPromptComposer
         return Task.FromResult(prompt);
     }
 
+    public Task<Prompt> ComposeTitleHookAsync(string articleBody, StyleCard styleCard, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(articleBody);
+        ArgumentNullException.ThrowIfNull(styleCard);
+
+        var prompt = new Prompt
+        {
+            SystemMessage = BuildSystemMessage(styleCard),
+            RagContext = string.Empty,
+            UserOverview = BuildStandaloneTitleHookUserContent(articleBody),
+        };
+
+        return Task.FromResult(prompt);
+    }
+
     private static string BuildSystemMessage(StyleCard styleCard)
     {
         var sb = new StringBuilder();
@@ -317,20 +332,65 @@ public sealed class PromptComposer : IPromptComposer
 
     private static string BuildDraftUserContent(BlogOverview overview, string? outline)
     {
-        var outlineSection = string.IsNullOrWhiteSpace(outline)
-            ? ""
-            : $"\n\n## 確定アウトライン\n\n{outline}";
-
-        return $"## 下書き生成\n\n以下の概要とアウトラインに沿って下書きを生成してください。\n\n## 記事の概要\n\n{overview.Content}{outlineSection}";
+        return string.Join("\n", new[]
+        {
+            "## 下書き生成（アウトライン準拠）",
+            string.Empty,
+            "以下の情報を使って、記事の下書きをMarkdownで作成してください。",
+            "- 利用してよい入力: 記事概要、確定アウトライン、RAGコンテキスト",
+            "- 確定アウトラインの章順を維持し、各章に対応する本文を作成すること",
+            "- 未確定のアウトラインを想定した補完はしないこと",
+            string.Empty,
+            "## 記事の概要",
+            string.Empty,
+            overview.Content,
+            string.Empty,
+            "## 確定アウトライン",
+            string.Empty,
+            string.IsNullOrWhiteSpace(outline) ? "(未設定)" : outline,
+        });
     }
 
     private static string BuildTitleHookUserContent(BlogOverview overview, string? draft)
     {
         var draftSection = string.IsNullOrWhiteSpace(draft)
-            ? ""
-            : $"\n\n## 確定下書き\n\n{draft}";
+            ? "(未設定)"
+            : draft;
 
-        return $"## タイトルと導入部生成\n\n以下の概要と下書きから、タイトル案と導入部を生成してください。\n\n## 記事の概要\n\n{overview.Content}{draftSection}";
+        return string.Join("\n", new[]
+        {
+            "## タイトルと導入部生成",
+            string.Empty,
+            "以下の概要と下書きから、タイトル案と導入部を生成してください。",
+            string.Empty,
+            "## 記事の概要",
+            string.Empty,
+            overview.Content,
+            string.Empty,
+            "## 確定下書き",
+            string.Empty,
+            draftSection,
+        });
+    }
+
+    private static string BuildStandaloneTitleHookUserContent(string articleBody)
+    {
+        return string.Join("\n", new[]
+        {
+            "## タイトル案と冒頭段落案の生成",
+            string.Empty,
+            "以下の完成済み本文だけを入力として、3案を作成してください。",
+            string.Empty,
+            "[出力ルール]",
+            "- 3案を必ず出力する",
+            "- 各案は次の形式: 1行目がタイトル、2行目以降が冒頭段落",
+            "- 案と案の区切りは `---` のみを使う",
+            "- 前置き・解説・注釈は出力しない",
+            string.Empty,
+            "## 入力本文",
+            string.Empty,
+            articleBody,
+        });
     }
 
     private static string TrimChunkText(string text)

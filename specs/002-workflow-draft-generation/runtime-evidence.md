@@ -1,5 +1,11 @@
 # Runtime Evidence: 002-workflow-draft-generation
 
+## 2026-03-06 Revision (Current Behavior)
+
+- ワークフロー本体は **Step1: アウトライン** と **Step2: 下書き** の2段階です。
+- Step2（下書き）確定時点で `Completed` へ遷移します。
+- タイトル/冒頭段落案は **独立機能**（UI: `/title-hook`, API: `/titlehook`, `/titlehook/preview`）として提供し、WorkflowSession を引き継ぎません。
+- 本節以降に残る旧仕様（ワークフロー内 Step3 タイトル生成）記述は、上記改訂内容で読み替えてください。
 > NOTE
 > - 本資料は `specs/002-workflow-draft-generation/spec.md` と `plan.md` に基づき、実行時（画面・API・永続化）の協調を **シーケンス図で先に固定** する。
 > - ここでの "Runtime Evidence" は「現状実装の正しさ」を保証するものではなく、**期待される協調（期待シーケンス）** を明文化する。
@@ -472,7 +478,7 @@ end
 
 ---
 
-### Scenario S-224: Confirm draft (enables Step3)
+### Scenario S-224: Confirm draft (completes workflow)
 
 #### Sequence (PlantUML)
 ```plantuml
@@ -494,11 +500,11 @@ S_WorkflowApi -> Cmp_WorkflowOrchestrator : [E3] ConfirmStepAsync(id, Step2_Draf
 Cmp_WorkflowOrchestrator -> D_WorkflowStore : [E4] GetByIdAsync(id)
 D_WorkflowStore --> Cmp_WorkflowOrchestrator : [E5] session
 Cmp_WorkflowOrchestrator -> Cmp_WorkflowOrchestrator : [E6] Validate + state transition
-Cmp_WorkflowOrchestrator -> D_WorkflowStore : [E7] UpdateAsync(session: DraftConfirmed=..., CurrentStep=Step3_TitleHook)
+Cmp_WorkflowOrchestrator -> D_WorkflowStore : [E7] UpdateAsync(session: DraftConfirmed=..., CurrentStep=Completed)
 D_WorkflowStore --> Cmp_WorkflowOrchestrator : [E8] ok
-Cmp_WorkflowOrchestrator --> S_WorkflowApi : [E9] confirmed=true, nextStep=titlehook
+Cmp_WorkflowOrchestrator --> S_WorkflowApi : [E9] confirmed=true, nextStep=completed
 S_WorkflowApi --> U_WebUI : [E10] 200 OK
-U_WebUI --> User : [E11] Navigate/enable Title step UI
+U_WebUI --> User : [E11] Show workflow completed state
 
 == Variations ==
 alt [E6] invalid state transition
@@ -611,6 +617,52 @@ U_WebUI --> User : [E8] Show "生成中です"; keep first running
 
 ---
 
+### Scenario S-301: Standalone title/hook generation
+
+#### Sequence (PlantUML)
+```plantuml
+@startuml
+title S-301 Standalone title/hook generation
+
+autonomous
+
+actor "User" as User
+participant "U-WebUI\nWorkflowTitle" as U_WebUI
+participant "S-TitleHookApi\nTitleHookEndpoints" as S_TitleHookApi
+participant "Cmp-PromptComposer\nPromptComposer" as Cmp_PromptComposer
+participant "Cmp-Llm\nILlmClient" as Cmp_Llm
+
+== Main ==
+User -> U_WebUI : [E1] Input completed article body
+U_WebUI -> S_TitleHookApi : [E2] POST /titlehook {articleBody}
+S_TitleHookApi -> Cmp_PromptComposer : [E3] ComposeTitleHookAsync(articleBody, styleCard)
+Cmp_PromptComposer --> S_TitleHookApi : [E4] prompt (article body only)
+S_TitleHookApi -> Cmp_Llm : [E5] GenerateAsync(prompt)
+Cmp_Llm --> S_TitleHookApi : [E6] generated content
+S_TitleHookApi --> U_WebUI : [E7] 200 OK {options[3], model, generatedAt}
+U_WebUI --> User : [E8] Show/edit 3 options
+
+== Variations ==
+alt [E2] invalid input
+  S_TitleHookApi --> U_WebUI : [E9] 400 INVALID_REQUEST
+  U_WebUI --> User : [E10] Show validation error
+end
+
+@enduml
+```
+
+#### Component–Step Map
+
+| Component (C4-ish) | Steps |
+|---|---|
+| User | E1, E8, E10 |
+| U-WebUI | E1, E2, E7, E8, E9, E10 |
+| S-TitleHookApi | E2, E3, E5, E7, E9 |
+| Cmp-PromptComposer | E3, E4 |
+| Cmp-Llm | E5, E6 |
+
+---
+
 ## Scenario Ledger (extracted)
 
 | Scenario ID | Title | Purpose/Value | Trigger (When) | Result (Then) | Participants | Primary API / IO | Errors / Timeouts / Retry | Link |
@@ -623,6 +675,12 @@ U_WebUI --> User : [E8] Show "生成中です"; keep first running
 | S-221 | Preview draft prompt | **確定アウトライン**から Step2 のプロンプトを確認する | 「プロンプトをプレビュー」(draft) | prompt が表示され、アウトラインが反映される | User, U-WebUI, S-WorkflowApi, Cmp-WorkflowOrchestrator, Cmp-PromptComposer, D-WorkflowStore | `POST /workflow/sessions/{id}/steps/draft/preview` | INVALID_STEP_TRANSITION / STORAGE_ERROR | #scenario-s-221-preview-draft-prompt-must-use-confirmed-outline--ragsnapshot |
 | S-222 | Generate draft (execute) | **プレビューと同一**のプロンプトで下書きを生成する | 「下書き生成」実行 | DraftGenerated/Edited が保存される | User, U-WebUI, S-WorkflowApi, Cmp-WorkflowOrchestrator, Cmp-PromptComposer, Cmp-Llm, D-WorkflowStore | `POST /workflow/sessions/{id}/steps/draft/generate` | INVALID_STEP_TRANSITION / LLM_TIMEOUT / LLM_ERROR | #scenario-s-222-generate-draft-execute-must-match-preview-prompt |
 | S-223 | Auto-save edited draft | 編集中の下書きが失われない | 編集入力（デバウンス） | DraftEdited が保存される | User, U-WebUI, S-WorkflowApi, Cmp-WorkflowOrchestrator, D-WorkflowStore | `POST /workflow/sessions/{id}/steps/draft/save` | STORAGE_ERROR | #scenario-s-223-auto-save-edited-draft |
-| S-224 | Confirm draft | Step3 に進める状態にする | 「確定」(draft) | DraftConfirmed が保存され CurrentStep=Step3 | User, U-WebUI, S-WorkflowApi, Cmp-WorkflowOrchestrator, D-WorkflowStore | `POST /workflow/sessions/{id}/steps/draft/confirm` | INVALID_STEP_TRANSITION | #scenario-s-224-confirm-draft-enables-step3 |
+| S-224 | Confirm draft | ワークフローを完了状態にする | 「確定」(draft) | DraftConfirmed が保存され CurrentStep=Completed | User, U-WebUI, S-WorkflowApi, Cmp-WorkflowOrchestrator, D-WorkflowStore | `POST /workflow/sessions/{id}/steps/draft/confirm` | INVALID_STEP_TRANSITION | #scenario-s-224-confirm-draft-completes-workflow |
 | S-231 | Reload/resume workflow session | リロード/再訪で状態を復元する | GET session | Step と成果物が復元される | User, U-WebUI, S-WorkflowApi, Cmp-WorkflowOrchestrator, D-WorkflowStore | `GET /workflow/sessions/{id}` | SESSION_NOT_FOUND / SESSION_EXPIRED | #scenario-s-231-reloadresume-workflow-session |
 | S-241 | Concurrency guard | 多重送信を抑止する | 連打/並行リクエスト | 2回目以降は 409 で拒否 | User, U-WebUI, S-WorkflowApi, Cmp-WorkflowOrchestrator | `POST .../generate` | 409 SESSION_BUSY | #scenario-s-241-concurrency-guard-session-busy |
+| S-301 | Standalone title/hook generation | 完成本文だけを入力にタイトル/冒頭段落案を生成する | /title-hook で生成実行 | 3案が返り、ユーザーが編集可能 | User, U-WebUI, S-TitleHookApi, Cmp-PromptComposer, Cmp-Llm | `POST /titlehook` | INVALID_REQUEST / LLM_TIMEOUT / LLM_ERROR | #scenario-s-301-standalone-titlehook-generation |
+
+
+
+
+

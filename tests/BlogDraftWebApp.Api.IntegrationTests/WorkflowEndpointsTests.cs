@@ -405,7 +405,7 @@ public sealed class WorkflowEndpointsTests
     [TestCase("1. 番号\n- a\n- b\n- c\n- d")]
     [TestCase("- a\n  - b\n    - c\n      - d\n- e")]
     [TestCase("- 1\n- 2\n- 3\n- 4")]
-    public async Task SaveOutline_ReturnsOutlineConstraintViolation_ForInvalidFormats(string invalidOutline)
+    public async Task SaveOutline_AllowsInvalidFormatsUntilConfirm(string invalidOutline)
     {
         await using var factory = new TestWebApplicationFactory();
         using var http = factory.CreateClient();
@@ -422,9 +422,13 @@ public sealed class WorkflowEndpointsTests
             EditedContent = invalidOutline,
         });
 
-        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
-        var payload = await response.Content.ReadFromJsonAsync<ErrorResponse>();
-        Assert.That(payload, Is.Not.Null);
-        Assert.That(payload!.ErrorCode, Is.EqualTo("OUTLINE_CONSTRAINT_VIOLATION"));
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+
+        var sessionResponse = await http.GetAsync($"/workflow/sessions/{created.SessionId}");
+        Assert.That(sessionResponse.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        var session = await sessionResponse.Content.ReadFromJsonAsync<GetSessionResponse>();
+        Assert.That(session, Is.Not.Null);
+        Assert.That(session!.OutlineEdited, Is.EqualTo(invalidOutline));
     }
 }
+

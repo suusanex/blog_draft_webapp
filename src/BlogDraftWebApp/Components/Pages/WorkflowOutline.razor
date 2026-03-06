@@ -44,9 +44,9 @@ else
                 </div>
             </div>
             <div class="col-4">
-                <div class="step @("Step3_TitleHook" == _currentStep ? "active" : (IsStepCompleted("Step3_TitleHook") ? "completed" : ""))">
+                <div class="step @("Completed" == _currentStep ? "active" : (IsStepCompleted("Completed") ? "completed" : ""))">
                     <div class="step-number">3</div>
-                    <div class="step-label">タイトル</div>
+                    <div class="step-label">完了</div>
                 </div>
             </div>
         </div>
@@ -91,7 +91,7 @@ else
             </button>
         </div>
     }
-    else if (_currentStep is "Step2_Draft" or "Step3_TitleHook" or "Completed")
+    else if (_currentStep is "Step2_Draft" or "Completed")
     {
         <div class="mb-4">
             <div class="alert alert-info">アウトラインは確定済みです。下書きステップへ進んでください。</div>
@@ -107,7 +107,7 @@ else
         <div class="mt-3 d-flex flex-column gap-2">
             <button class="btn btn-outline-secondary" disabled="@_isBusy" @onclick="PreviewOutlineAsync">プロンプトを確認</button>
             <button class="btn btn-outline-warning" disabled="@_isBusy" @onclick="RefreshRagAsync">RAG再検索</button>
-            <button class="btn btn-outline-secondary" disabled="@_isBusy || string.IsNullOrWhiteSpace(_outlineContent)" @onclick="SaveOutlineAsync">手動保存</button>
+            <button class="btn btn-outline-secondary" disabled="@_isBusy || string.IsNullOrWhiteSpace(_outlineContent)" @onclick="() => SaveOutlineAsync()">手動保存</button>
         </div>
     </details>
 }
@@ -181,9 +181,9 @@ else
     {
         return checkStep switch
         {
-            "Step1_Outline" => !string.IsNullOrWhiteSpace(_outlineContent) && (_currentStep is "Step2_Draft" or "Step3_TitleHook" or "Completed"),
-            "Step2_Draft" => _currentStep is "Step3_TitleHook" or "Completed",
-            "Step3_TitleHook" => _currentStep is "Completed",
+            "Step1_Outline" => !string.IsNullOrWhiteSpace(_outlineContent) && (_currentStep is "Step2_Draft" or "Completed"),
+            "Step2_Draft" => _currentStep is "Completed",
+            "Completed" => _currentStep is "Completed",
             _ => false
         };
     }
@@ -280,9 +280,9 @@ else
                 {
                     _currentStep = payload.CurrentStep;
                     _model.Overview = payload.InitialInput;
-                    _outlineContent = payload.OutlineEdited
+                    _outlineContent = payload.OutlineConfirmed
+                        ?? payload.OutlineEdited
                         ?? payload.OutlineGenerated
-                        ?? payload.OutlineConfirmed
                         ?? string.Empty;
                     return;
                 }
@@ -393,16 +393,19 @@ else
         }
     }
 
-    private async Task SaveOutlineAsync()
+        private async Task SaveOutlineAsync(bool userInitiated = true)
     {
         if (string.IsNullOrWhiteSpace(_sessionId))
         {
             return;
         }
 
-        _isBusy = true;
-        _error = null;
-        _autoSaveMessage = null;
+        if (userInitiated)
+        {
+            _isBusy = true;
+            _error = null;
+            _autoSaveMessage = null;
+        }
 
         try
         {
@@ -414,24 +417,35 @@ else
 
             if (response.StatusCode == HttpStatusCode.OK)
             {
-                _autoSaveMessage = "保存しました";
+                _autoSaveMessage = userInitiated ? "保存しました" : "自動保存しました";
                 return;
             }
 
-            _error = await response.Content.ReadFromJsonAsync<ErrorResponse>();
-            _error ??= new ErrorResponse
+            var apiError = await response.Content.ReadFromJsonAsync<ErrorResponse>()
+                ?? new ErrorResponse
+                {
+                    ErrorCode = "UNKNOWN",
+                    Message = "保存に失敗しました",
+                    IsRetryable = false,
+                };
+
+            if (userInitiated)
             {
-                ErrorCode = "UNKNOWN",
-                Message = "エラーが発生しました",
-                IsRetryable = false,
-            };
+                _error = apiError;
+            }
+            else
+            {
+                _autoSaveMessage = "自動保存に失敗しました";
+            }
         }
         finally
         {
-            _isBusy = false;
+            if (userInitiated)
+            {
+                _isBusy = false;
+            }
         }
     }
-
     private async Task ConfirmOutlineAsync()
     {
         if (string.IsNullOrWhiteSpace(_sessionId))
@@ -561,7 +575,7 @@ else
                 await Task.Delay(TimeSpan.FromMilliseconds(800), cts.Token);
                 if (!cts.Token.IsCancellationRequested)
                 {
-                    await InvokeAsync(SaveOutlineAsync);
+                    await InvokeAsync(() => SaveOutlineAsync(userInitiated: false));
                 }
             }
             catch (OperationCanceledException)
@@ -577,3 +591,5 @@ else
         return http;
     }
 }
+
+

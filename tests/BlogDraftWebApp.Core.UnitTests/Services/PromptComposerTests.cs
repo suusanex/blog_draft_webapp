@@ -211,4 +211,25 @@ public sealed class PromptComposerTests
             .Max();
         Assert.That(maxLineLength, Is.LessThanOrEqualTo(510));
     }
+    [Test]
+    public async Task ComposeTitleHookAsync_本文のみを入力としてプロンプトを構築する()
+    {
+        var composer = new PromptComposer();
+
+        var styleCard = new StyleCard
+        {
+            SystemPrompt = "sys",
+            Content = "content",
+        };
+
+        var prompt = await composer.ComposeTitleHookAsync(
+            "これは完成した本文です。" + new string('あ', 120),
+            styleCard,
+            CancellationToken.None);
+
+        Assert.That(prompt.RagContext, Is.EqualTo(string.Empty));
+        Assert.That(prompt.UserOverview, Does.Contain("タイトル案と冒頭段落案の生成"));
+        Assert.That(prompt.UserOverview, Does.Contain("入力本文"));
+        Assert.That(prompt.UserOverview, Does.Contain("完成した本文"));
+    }
 }
