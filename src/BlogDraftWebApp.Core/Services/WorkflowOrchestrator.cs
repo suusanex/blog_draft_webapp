@@ -166,15 +166,9 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
             GetDraftForPrompt(session, step),
             cancellationToken);
 
-        var draft = await _llmClient.GenerateAsync(
-            prompt,
-            cancellationToken,
-            step == WorkflowStep.Step1_Outline ? _options.OutlineMaxOutputTokens : null);
-
-        if (step == WorkflowStep.Step1_Outline)
-        {
-            _outlineValidator.ValidateOrThrow(draft.Content, _options);
-        }
+        var draft = step == WorkflowStep.Step1_Outline
+            ? await GenerateOutlineWithRecoveryAsync(prompt, cancellationToken)
+            : await _llmClient.GenerateAsync(prompt, cancellationToken, null);
 
         var content = ApplyGeneratedContent(session, step, draft.Content);
         session.Touch(_options.SessionRetentionDays);
@@ -325,7 +319,7 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
         switch (step)
         {
             case WorkflowStep.Step1_Outline:
-                _outlineValidator.ValidateOrThrow(confirmedContent, _options);
+                _outlineValidator.ValidateOrThrow(confirmedContent, _options, OutlineViolationSource.UserInput);
                 session.OutlineConfirmed = confirmedContent;
                 session.TransitionToStep(WorkflowStep.Step2_Draft, _options.SessionRetentionDays);
                 return WorkflowStep.Step2_Draft;
@@ -363,6 +357,271 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
             : null;
     }
 
+    private async Task<Draft> GenerateOutlineWithRecoveryAsync(Prompt prompt, CancellationToken cancellationToken)
+    {
+        var generated = await _llmClient.GenerateAsync(prompt, cancellationToken, _options.OutlineMaxOutputTokens);
+        var normalized = NormalizeGeneratedOutline(generated.Content);
+
+        if (TryValidateGeneratedOutline(normalized, out var validationMessage))
+        {
+            return CloneDraft(generated, normalized);
+        }
+
+        _logger.LogWarning("Generated outline failed validation. Attempting repair. Reason={Reason}", validationMessage);
+
+        var repaired = await _llmClient.GenerateAsync(
+            BuildOutlineRepairPrompt(generated.Content, validationMessage ?? "unknown"),
+            cancellationToken,
+            _options.OutlineMaxOutputTokens);
+
+        var normalizedRepaired = NormalizeGeneratedOutline(repaired.Content);
+        _outlineValidator.ValidateOrThrow(normalizedRepaired, _options, OutlineViolationSource.LlmGenerated);
+
+        return CloneDraft(repaired, normalizedRepaired);
+    }
+
+    private bool TryValidateGeneratedOutline(string content, out string? validationMessage)
+    {
+        try
+        {
+            _outlineValidator.ValidateOrThrow(content, _options, OutlineViolationSource.LlmGenerated);
+            validationMessage = null;
+            return true;
+        }
+        catch (OutlineConstraintViolationException ex)
+        {
+            validationMessage = ex.Message;
+            return false;
+        }
+    }
+
+    private static Draft CloneDraft(Draft source, string content)
+    {
+        return new Draft
+        {
+            Content = content,
+            Model = source.Model,
+            GeneratedAt = source.GeneratedAt,
+            TokensUsed = source.TokensUsed,
+        };
+    }
+
+    private Prompt BuildOutlineRepairPrompt(string rawContent, string validationMessage)
+    {
+        return new Prompt
+        {
+            SystemMessage = string.Join("\n", new[]
+            {
+                "あなたはMarkdownアウトライン整形専用アシスタントです。",
+                "出力はブログ記事のアウトライン本文だけに限定してください。",
+                "説明文、前置き、後書き、コードフェンスは出力しないでください。",
+            }),
+            UserOverview = string.Join("\n", new[]
+            {
+                "## アウトライン再整形",
+                string.Empty,
+                "次のLLM出力を、制約を満たすアウトラインに整形してください。",
+                "意味と順序はできるだけ維持し、余分な説明行は捨ててください。",
+                string.Empty,
+                "[制約]",
+                "- 出力は `- ` で始まる箇条書きのみ",
+                $"- 行数は {_options.OutlineMinLines}〜{_options.OutlineMaxLines} 行",
+                $"- 階層は最大 {_options.OutlineMaxDepth}（2スペースインデント）",
+                $"- 1行は {_options.OutlineMaxLineLength} 文字以内",
+                $"- 総文字数は {_options.OutlineMaxTotalChars} 文字以内",
+                "- 項目が多すぎる場合は近い内容を統合して収める",
+                "- 説明、注釈、ラベル、コードフェンスは禁止",
+                string.Empty,
+                "[直前の検証エラー]",
+                validationMessage,
+                string.Empty,
+                "[整形対象]",
+                rawContent,
+            }),
+        };
+    }
+
+    private string NormalizeGeneratedOutline(string content)
+    {
+        var normalized = (content ?? string.Empty).Replace("\r\n", "\n", StringComparison.Ordinal).Trim();
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            return string.Empty;
+        }
+
+        var codeFenceContent = ExtractCodeFenceContent(normalized);
+        if (!string.IsNullOrWhiteSpace(codeFenceContent))
+        {
+            normalized = codeFenceContent;
+        }
+
+        var normalizedLines = new List<string>();
+        foreach (var rawLine in normalized.Split('\n'))
+        {
+            if (TryNormalizeOutlineLine(rawLine, out var normalizedLine))
+            {
+                normalizedLines.Add(normalizedLine!);
+            }
+        }
+
+        return normalizedLines.Count >= _options.OutlineMinLines
+            ? string.Join("\n", normalizedLines)
+            : normalized;
+    }
+
+    private string? ExtractCodeFenceContent(string content)
+    {
+        var lines = content.Split('\n');
+        var insideFence = false;
+        var buffer = new List<string>();
+
+        foreach (var line in lines)
+        {
+            if (line.TrimStart().StartsWith("```", StringComparison.Ordinal))
+            {
+                if (insideFence)
+                {
+                    break;
+                }
+
+                insideFence = true;
+                continue;
+            }
+
+            if (insideFence)
+            {
+                buffer.Add(line);
+            }
+        }
+
+        return buffer.Count == 0 ? null : string.Join("\n", buffer).Trim();
+    }
+
+    private bool TryNormalizeOutlineLine(string rawLine, out string? normalizedLine)
+    {
+        normalizedLine = null;
+
+        if (string.IsNullOrWhiteSpace(rawLine))
+        {
+            return false;
+        }
+
+        var unquoted = rawLine.Replace("\t", "  ", StringComparison.Ordinal);
+        var trimmed = unquoted.TrimStart();
+        while (trimmed.StartsWith(">", StringComparison.Ordinal))
+        {
+            trimmed = trimmed[1..].TrimStart();
+        }
+
+        if (string.IsNullOrWhiteSpace(trimmed)
+            || trimmed.StartsWith("```", StringComparison.Ordinal)
+            || string.Equals(trimmed, "---", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var leadingSpaces = CountLeadingSpaces(unquoted);
+        var depth = Math.Min(leadingSpaces / 2, _options.OutlineMaxDepth);
+        var indent = new string(' ', depth * 2);
+
+        string? text = null;
+        if (trimmed.StartsWith("- ", StringComparison.Ordinal))
+        {
+            text = trimmed[2..].Trim();
+        }
+        else if (trimmed.Length > 1 && trimmed[0] == '-' && !char.IsWhiteSpace(trimmed[1]))
+        {
+            text = trimmed[1..].Trim();
+        }
+        else if (trimmed.StartsWith("* ", StringComparison.Ordinal) || trimmed.StartsWith("+ ", StringComparison.Ordinal))
+        {
+            text = trimmed[2..].Trim();
+        }
+        else if (LooksLikeNumberedList(trimmed, out var numberedText))
+        {
+            text = numberedText;
+        }
+        else if (LooksLikeHeading(trimmed, out var headingText))
+        {
+            text = headingText;
+        }
+
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return false;
+        }
+
+        if (text.StartsWith("[ ] ", StringComparison.Ordinal) || text.StartsWith("[x] ", StringComparison.OrdinalIgnoreCase))
+        {
+            text = text[4..].Trim();
+        }
+
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return false;
+        }
+
+        normalizedLine = indent + "- " + text;
+        return true;
+    }
+
+    private static bool LooksLikeNumberedList(string text, out string? content)
+    {
+        content = null;
+        var index = 0;
+        while (index < text.Length && char.IsDigit(text[index]))
+        {
+            index++;
+        }
+
+        if (index == 0 || index + 1 >= text.Length)
+        {
+            return false;
+        }
+
+        if ((text[index] != '.' && text[index] != ')') || !char.IsWhiteSpace(text[index + 1]))
+        {
+            return false;
+        }
+
+        content = text[(index + 1)..].Trim();
+        return !string.IsNullOrWhiteSpace(content);
+    }
+
+    private static bool LooksLikeHeading(string text, out string? content)
+    {
+        content = null;
+        if (!text.StartsWith('#'))
+        {
+            return false;
+        }
+
+        var trimmed = text.TrimStart('#', ' ').Trim();
+        if (string.IsNullOrWhiteSpace(trimmed))
+        {
+            return false;
+        }
+
+        content = trimmed;
+        return true;
+    }
+
+    private static int CountLeadingSpaces(string line)
+    {
+        var count = 0;
+        foreach (var ch in line)
+        {
+            if (ch == ' ')
+            {
+                count++;
+                continue;
+            }
+
+            break;
+        }
+
+        return count;
+    }
     private static void ValidateDraft(string content)
     {
         if (string.IsNullOrWhiteSpace(content))
@@ -498,5 +757,4 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
         return handle;
     }
 }
-
 

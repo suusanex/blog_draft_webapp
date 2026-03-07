@@ -54,6 +54,11 @@ public sealed class OpenAiLlmClient : ILlmClient
                 },
             };
 
+            if (ShouldUseLowTemperature(prompt))
+            {
+                body["temperature"] = 0.2;
+            }
+
             foreach (var (key, value) in _options.Parameters)
             {
                 body[key] = value;
@@ -110,6 +115,12 @@ public sealed class OpenAiLlmClient : ILlmClient
             _logger.LogError(ex, "LLM call failed.");
             throw new LlmException("LLM_ERROR", "LLM サービスでエラーが発生しました", true, ex);
         }
+    }
+
+    private static bool ShouldUseLowTemperature(Prompt prompt)
+    {
+        return prompt.UserOverview.Contains("アウトライン生成（厳格フォーマット）", StringComparison.Ordinal)
+            || prompt.UserOverview.Contains("アウトライン再整形", StringComparison.Ordinal);
     }
 
     private static string BuildUserContent(Prompt prompt)

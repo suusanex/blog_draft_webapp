@@ -29,18 +29,18 @@ public sealed class GenerateDraftTests
     }
 
     [Test]
-    public void OverviewEmpty_DisablesGenerateButton()
+    public void OverviewEmpty_KeepsGenerateButtonEnabled()
     {
         ConfigureHttpClient(CreateJsonResponse(HttpStatusCode.OK, new GenerateDraftResponse { Draft = "# Title" }));
 
         var cut = _context.RenderComponent<GenerateDraft>();
 
         var button = cut.Find("button");
-        Assert.That(button.HasAttribute("disabled"), Is.True);
+        Assert.That(button.HasAttribute("disabled"), Is.False);
     }
 
     [Test]
-    public void OverviewInput_EnablesGenerateButton()
+    public void OverviewInput_KeepsGenerateButtonEnabled()
     {
         ConfigureHttpClient(CreateJsonResponse(HttpStatusCode.OK, new GenerateDraftResponse { Draft = "# Title" }));
 
@@ -229,3 +229,4 @@ public sealed class GenerateDraftTests
         }
     }
 }
+

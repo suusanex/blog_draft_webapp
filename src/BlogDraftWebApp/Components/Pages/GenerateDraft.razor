@@ -13,7 +13,7 @@
 
 <h1>ブログ下書き生成</h1>
 
-<EditForm Model="_model" OnValidSubmit="SubmitAsync">
+<EditForm Model="_model" OnSubmit="HandleSubmitAsync">
     <DataAnnotationsValidator />
 
     <div class="mb-3">
@@ -27,7 +27,7 @@
         <label class="form-check-label" for="previewMode">プレビューモード（LLM 入力内容を表示）</label>
     </div>
 
-    <button class="btn btn-primary" type="submit" disabled="@IsGenerateDisabled">@(_isBusy ? "生成中..." : (_isPreviewMode ? "プレビュー" : "下書きを生成"))</button>
+    <button class="btn btn-primary" type="submit">@(_isBusy ? "生成中..." : (_isPreviewMode ? "プレビュー" : "下書きを生成"))</button>
     @if (_isBusy)
     {
         <span class="ms-2">生成中...</span>
@@ -105,15 +105,13 @@
     private string? _copyPromptMessage;
     private ErrorResponse? _error;
 
-    private bool IsGenerateDisabled => _isBusy || string.IsNullOrWhiteSpace(_model.Overview);
-
     private void OnOverviewChanged(string value)
     {
         _model.Overview = value;
         StateHasChanged();
     }
 
-    private Task SubmitAsync() => _isPreviewMode ? PreviewAsync() : GenerateAsync();
+    private Task HandleSubmitAsync(EditContext _) => _isPreviewMode ? PreviewAsync() : GenerateAsync();
 
     private async Task PreviewAsync()
     {
@@ -222,3 +220,4 @@
         _copyPromptMessage = "コピーしました";
     }
 }
+
