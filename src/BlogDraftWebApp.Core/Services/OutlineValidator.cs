@@ -5,16 +5,16 @@ namespace BlogDraftWebApp.Core.Services;
 
 public sealed class OutlineValidator
 {
-    public void ValidateOrThrow(string content, WorkflowOptions options)
+    public void ValidateOrThrow(string content, WorkflowOptions options, OutlineViolationSource source = OutlineViolationSource.UserInput)
     {
         if (string.IsNullOrWhiteSpace(content))
         {
-            throw new OutlineConstraintViolationException("アウトラインを入力してください");
+            throw new OutlineConstraintViolationException("アウトラインを入力してください", source);
         }
 
         if (content.Length > options.OutlineMaxTotalChars)
         {
-            throw new OutlineConstraintViolationException($"アウトラインの総文字数は {options.OutlineMaxTotalChars} 文字以内で入力してください");
+            throw new OutlineConstraintViolationException($"アウトラインの総文字数は {options.OutlineMaxTotalChars} 文字以内で入力してください", source);
         }
 
         var normalizedLines = content
@@ -25,33 +25,33 @@ public sealed class OutlineValidator
 
         if (normalizedLines.Count < options.OutlineMinLines || normalizedLines.Count > options.OutlineMaxLines)
         {
-            throw new OutlineConstraintViolationException($"アウトラインの行数は {options.OutlineMinLines}〜{options.OutlineMaxLines} 行で入力してください");
+            throw new OutlineConstraintViolationException($"アウトラインの行数は {options.OutlineMinLines}〜{options.OutlineMaxLines} 行で入力してください", source);
         }
 
         foreach (var line in normalizedLines)
         {
-            ValidateLine(line, options);
+            ValidateLine(line, options, source);
         }
     }
 
-    private static void ValidateLine(string line, WorkflowOptions options)
+    private static void ValidateLine(string line, WorkflowOptions options, OutlineViolationSource source)
     {
         if (line.Length > options.OutlineMaxLineLength)
         {
-            throw new OutlineConstraintViolationException($"アウトラインの1行は {options.OutlineMaxLineLength} 文字以内で入力してください");
+            throw new OutlineConstraintViolationException($"アウトラインの1行は {options.OutlineMaxLineLength} 文字以内で入力してください", source);
         }
 
         var leadingSpaces = CountLeadingSpaces(line);
         var depth = leadingSpaces / 2;
         if (depth > options.OutlineMaxDepth)
         {
-            throw new OutlineConstraintViolationException($"アウトラインの階層は最大 {options.OutlineMaxDepth} までです");
+            throw new OutlineConstraintViolationException($"アウトラインの階層は最大 {options.OutlineMaxDepth} までです", source);
         }
 
         var trimmedStart = line.TrimStart();
         if (!trimmedStart.StartsWith("- ", StringComparison.Ordinal))
         {
-            throw new OutlineConstraintViolationException("アウトラインは `-` で始まる箇条書きのみ使用できます");
+            throw new OutlineConstraintViolationException("アウトラインは `-` で始まる箇条書きのみ使用できます", source);
         }
 
         if (trimmedStart.StartsWith("#", StringComparison.Ordinal)
@@ -61,13 +61,13 @@ public sealed class OutlineValidator
             || trimmedStart.StartsWith("* ", StringComparison.Ordinal)
             || trimmedStart.StartsWith("+ ", StringComparison.Ordinal))
         {
-            throw new OutlineConstraintViolationException("見出し・番号付きリスト・引用・コードブロック等は使用できません");
+            throw new OutlineConstraintViolationException("見出し・番号付きリスト・引用・コードブロック等は使用できません", source);
         }
 
         var bulletText = trimmedStart[2..].Trim();
         if (string.IsNullOrWhiteSpace(bulletText))
         {
-            throw new OutlineConstraintViolationException("箇条書きの本文を入力してください");
+            throw new OutlineConstraintViolationException("箇条書きの本文を入力してください", source);
         }
     }
 

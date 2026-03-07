@@ -164,4 +164,40 @@ public sealed class OpenAiLlmClientTests
 
         Assert.That(actualMaxTokens, Is.EqualTo(350));
     }
+
+    [Test]
+    public async Task GenerateAsync_アウトライン生成時_温度を低めに設定する()
+    {
+        double? actualTemperature = null;
+
+        var handler = new StubHttpMessageHandler(async (request, _) =>
+        {
+            var body = await request.Content!.ReadAsStringAsync();
+            using var json = JsonDocument.Parse(body);
+            if (json.RootElement.TryGetProperty("temperature", out var temperatureProp))
+            {
+                actualTemperature = temperatureProp.GetDouble();
+            }
+
+            const string response = "{\"choices\":[{\"message\":{\"content\":\"- a\\n- b\\n- c\\n- d\\n- e\"}}]}";
+            return StubHttpMessageHandler.Json(HttpStatusCode.OK, response);
+        });
+
+        var httpClient = new HttpClient(handler);
+        var options = Options.Create(new LlmOptions
+        {
+            ApiKey = "sk-test",
+            BaseUrl = "https://api.openai.com/v1",
+            Model = "gpt-test",
+            MaxTokens = 4096,
+            RequestTimeoutSeconds = 30,
+        });
+
+        var client = new OpenAiLlmClient(httpClient, NullLogger<OpenAiLlmClient>.Instance, options);
+        var prompt = new Prompt { SystemMessage = "sys", UserOverview = "## アウトライン生成（厳格フォーマット）\n- rule" };
+
+        _ = await client.GenerateAsync(prompt, CancellationToken.None, maxOutputTokens: 350);
+
+        Assert.That(actualTemperature, Is.EqualTo(0.2).Within(0.0001));
+    }
 }

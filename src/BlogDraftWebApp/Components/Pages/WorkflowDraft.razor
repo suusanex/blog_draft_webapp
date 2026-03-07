@@ -52,7 +52,7 @@ else
     }
 
     <div class="mb-4">
-        <button class="btn btn-primary btn-lg w-100" disabled="@(_isBusy || _currentStep == "Step1_Outline")" @onclick="GenerateDraftAsync">
+        <button class="btn btn-primary btn-lg w-100" @onclick="GenerateDraftAsync">
             @(_isBusy ? "生成中..." : (string.IsNullOrWhiteSpace(_draftContent) ? "下書きを生成" : "再生成"))
         </button>
     </div>
@@ -61,7 +61,7 @@ else
     {
         <div class="alert alert-info">
             <div>RAG差分: +@_refreshDiff.AddedChunkCount / -@_refreshDiff.RemovedChunkCount (rate=@_refreshDiff.ChangeRate)</div>
-            <button class="btn btn-sm btn-primary mt-2" disabled="@_isBusy" @onclick="ConfirmRagRefreshAsync">この差分を採用</button>
+            <button class="btn btn-sm btn-primary mt-2" @onclick="ConfirmRagRefreshAsync">この差分を採用</button>
         </div>
     }
 
@@ -79,7 +79,7 @@ else
     @if (_currentStep is "Step2_Draft")
     {
         <div class="mb-4">
-            <button class="btn btn-success btn-lg w-100" disabled="@_isBusy || string.IsNullOrWhiteSpace(_draftContent)" @onclick="ConfirmDraftAsync">
+            <button class="btn btn-success btn-lg w-100" @onclick="ConfirmDraftAsync">
                 下書きを確定して完了
             </button>
         </div>
@@ -96,9 +96,9 @@ else
     <details class="mb-3">
         <summary class="btn btn-link">▼ 詳細オプション</summary>
         <div class="mt-3 d-flex flex-column gap-2">
-            <button class="btn btn-outline-secondary" disabled="@_isBusy" @onclick="PreviewDraftAsync">プロンプトを確認</button>
-            <button class="btn btn-outline-warning" disabled="@_isBusy" @onclick="RefreshRagAsync">RAG再検索</button>
-            <button class="btn btn-outline-secondary" disabled="@_isBusy || string.IsNullOrWhiteSpace(_draftContent)" @onclick="() => SaveDraftAsync()">手動保存</button>
+            <button class="btn btn-outline-secondary" @onclick="PreviewDraftAsync">プロンプトを確認</button>
+            <button class="btn btn-outline-warning" @onclick="RefreshRagAsync">RAG再検索</button>
+            <button class="btn btn-outline-secondary" @onclick="() => SaveDraftAsync()">手動保存</button>
         </div>
     </details>
 }
@@ -466,6 +466,7 @@ else
         return http;
     }
 }
+
 
 
 

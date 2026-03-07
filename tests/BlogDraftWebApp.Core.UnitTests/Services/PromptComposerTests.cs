@@ -233,3 +233,4 @@ public sealed class PromptComposerTests
         Assert.That(prompt.UserOverview, Does.Contain("完成した本文"));
     }
 }
+

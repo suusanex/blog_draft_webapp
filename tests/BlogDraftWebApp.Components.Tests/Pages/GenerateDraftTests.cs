@@ -358,3 +358,4 @@ public sealed class GenerateDraftTests
         protected override void NavigateToCore(string uri, bool forceLoad) => Uri = ToAbsoluteUri(uri).ToString();
     }
 }
+

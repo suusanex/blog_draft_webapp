@@ -77,4 +77,16 @@ public sealed class OutlineValidatorTests
         Assert.That(ex, Is.Not.Null);
         Assert.That(ex!.Message, Does.Contain("行数"));
     }
+
+    [Test]
+    public void ValidateOrThrow_生成結果検証時_発生源を保持する()
+    {
+        var validator = new OutlineValidator();
+
+        var ex = Assert.Throws<OutlineConstraintViolationException>(() =>
+            validator.ValidateOrThrow("# invalid\n- a\n- b\n- c\n- d", DefaultOptions, OutlineViolationSource.LlmGenerated));
+
+        Assert.That(ex, Is.Not.Null);
+        Assert.That(ex!.SourceKind, Is.EqualTo(OutlineViolationSource.LlmGenerated));
+    }
 }

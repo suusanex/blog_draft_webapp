@@ -364,7 +364,7 @@ public sealed class WorkflowEndpointsTests
     }
 
     [Test]
-    public async Task GenerateOutline_ReturnsOutlineConstraintViolation_WhenGeneratedFormatInvalid()
+    public async Task GenerateOutline_StripsPreambleAndCodeFence_WhenGeneratedContentIsSalvageable()
     {
         await using var factory = new TestWebApplicationFactory();
 
@@ -376,7 +376,7 @@ public sealed class WorkflowEndpointsTests
             .Setup(x => x.GenerateAsync(It.IsAny<Prompt>(), It.IsAny<CancellationToken>(), It.IsAny<int?>()))
             .ReturnsAsync(new Draft
             {
-                Content = "# invalid\n- one\n- two\n- three\n- four",
+                Content = "以下のアウトラインです\n```markdown\n- 背景\n  - 課題\n- 目的\n  - 対象読者\n- 結論\n```",
                 Model = "test",
                 GeneratedAt = DateTimeOffset.UtcNow,
             });
@@ -395,10 +395,49 @@ public sealed class WorkflowEndpointsTests
             Regenerate = false,
         });
 
-        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        var payload = await response.Content.ReadFromJsonAsync<GenerateStepResponse>();
+        Assert.That(payload, Is.Not.Null);
+        Assert.That(payload!.Generated, Is.EqualTo("- 背景\n  - 課題\n- 目的\n  - 対象読者\n- 結論"));
+    }
+
+    [Test]
+    public async Task GenerateOutline_ReturnsRetryableGenerationError_WhenGeneratedFormatInvalid()
+    {
+        await using var factory = new TestWebApplicationFactory();
+
+        factory.RetrievalServiceMock
+            .Setup(x => x.RetrieveAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new RetrievalResult(new List<RAGChunk>(), null));
+
+        factory.LlmClientMock
+            .Setup(x => x.GenerateAsync(It.IsAny<Prompt>(), It.IsAny<CancellationToken>(), It.IsAny<int?>()))
+            .ReturnsAsync(new Draft
+            {
+                Content = "1. 背景\n2. 課題\n3. 目的\n4. 対象読者",
+                Model = "test",
+                GeneratedAt = DateTimeOffset.UtcNow,
+            });
+
+        using var http = factory.CreateClient();
+
+        var createResponse = await http.PostAsJsonAsync("/workflow/sessions", new CreateSessionRequest
+        {
+            Overview = "0123456789",
+        });
+        var created = await createResponse.Content.ReadFromJsonAsync<CreateSessionResponse>();
+        Assert.That(created, Is.Not.Null);
+
+        var response = await http.PostAsJsonAsync($"/workflow/sessions/{created!.SessionId}/steps/outline/generate", new GenerateStepRequest
+        {
+            Regenerate = false,
+        });
+
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadGateway));
         var payload = await response.Content.ReadFromJsonAsync<ErrorResponse>();
         Assert.That(payload, Is.Not.Null);
-        Assert.That(payload!.ErrorCode, Is.EqualTo("OUTLINE_CONSTRAINT_VIOLATION"));
+        Assert.That(payload!.ErrorCode, Is.EqualTo("OUTLINE_GENERATION_INVALID"));
+        Assert.That(payload.IsRetryable, Is.True);
     }
 
     [TestCase("# 見出し\n- a\n- b\n- c\n- d")]

@@ -113,6 +113,117 @@ public sealed class WorkflowOrchestratorTests
     }
 
     [Test]
+    public async Task GenerateStepAsync_前置きとコードフェンス混入時_正規化して保存する()
+    {
+        var repository = new InMemoryWorkflowRepository();
+        var lockService = new WorkflowSessionLock();
+        var llmMock = new Mock<ILlmClient>();
+        var retrievalMock = new Mock<IRetrievalService>();
+        var composerMock = new Mock<IPromptComposer>();
+
+        var orchestrator = CreateOrchestrator(repository, lockService, llmMock, retrievalMock, composerMock);
+
+        var session = new WorkflowSession
+        {
+            SessionId = "outline-normalize",
+            InitialInput = new BlogOverview("0123456789"),
+            CreatedAt = DateTimeOffset.UtcNow,
+            LastAccessedAt = DateTimeOffset.UtcNow,
+            DeleteAt = DateTimeOffset.UtcNow.AddDays(1),
+        };
+
+        await repository.CreateSessionAsync(session, CancellationToken.None);
+
+        retrievalMock
+            .Setup(x => x.RetrieveAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new RetrievalResult(new List<RAGChunk>(), null));
+
+        composerMock
+            .Setup(x => x.ComposeAsync(
+                WorkflowStep.Step1_Outline,
+                It.IsAny<BlogOverview>(),
+                It.IsAny<IReadOnlyList<RAGChunk>>(),
+                It.IsAny<StyleCard>(),
+                It.IsAny<string?>(),
+                It.IsAny<string?>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Prompt { UserOverview = "prompt" });
+
+        llmMock
+            .Setup(x => x.GenerateAsync(It.IsAny<Prompt>(), It.IsAny<CancellationToken>(), It.IsAny<int?>()))
+            .ReturnsAsync(new Draft
+            {
+                Content = "以下のアウトラインです\n```markdown\n- 背景\n  - 課題\n- 目的\n  - 対象読者\n- 結論\n```",
+                Model = "m1",
+                GeneratedAt = DateTimeOffset.UtcNow,
+            });
+
+        var result = await orchestrator.GenerateStepAsync(session.SessionId, WorkflowStep.Step1_Outline, false, CancellationToken.None);
+
+        Assert.That(result.Content, Is.EqualTo("- 背景\n  - 課題\n- 目的\n  - 対象読者\n- 結論"));
+        llmMock.Verify(x => x.GenerateAsync(It.IsAny<Prompt>(), It.IsAny<CancellationToken>(), It.IsAny<int?>()), Times.Once);
+    }
+
+    [Test]
+    public async Task GenerateStepAsync_初回が番号付きリストでも_再整形で救済する()
+    {
+        var repository = new InMemoryWorkflowRepository();
+        var lockService = new WorkflowSessionLock();
+        var llmMock = new Mock<ILlmClient>();
+        var retrievalMock = new Mock<IRetrievalService>();
+        var composerMock = new Mock<IPromptComposer>();
+
+        var orchestrator = CreateOrchestrator(repository, lockService, llmMock, retrievalMock, composerMock);
+
+        var session = new WorkflowSession
+        {
+            SessionId = "outline-repair",
+            InitialInput = new BlogOverview("0123456789"),
+            CreatedAt = DateTimeOffset.UtcNow,
+            LastAccessedAt = DateTimeOffset.UtcNow,
+            DeleteAt = DateTimeOffset.UtcNow.AddDays(1),
+        };
+
+        await repository.CreateSessionAsync(session, CancellationToken.None);
+
+        retrievalMock
+            .Setup(x => x.RetrieveAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new RetrievalResult(new List<RAGChunk>(), null));
+
+        composerMock
+            .Setup(x => x.ComposeAsync(
+                WorkflowStep.Step1_Outline,
+                It.IsAny<BlogOverview>(),
+                It.IsAny<IReadOnlyList<RAGChunk>>(),
+                It.IsAny<StyleCard>(),
+                It.IsAny<string?>(),
+                It.IsAny<string?>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Prompt { UserOverview = "prompt" });
+
+        llmMock
+            .SetupSequence(x => x.GenerateAsync(It.IsAny<Prompt>(), It.IsAny<CancellationToken>(), It.IsAny<int?>()))
+            .ReturnsAsync(new Draft
+            {
+                Content = "1. 背景\n2. 課題\n3. 目的\n4. 対象読者",
+                Model = "m1",
+                GeneratedAt = DateTimeOffset.UtcNow,
+            })
+            .ReturnsAsync(new Draft
+            {
+                Content = "- 背景\n  - 課題\n- 目的\n  - 対象読者\n- 結論",
+                Model = "m1-repair",
+                GeneratedAt = DateTimeOffset.UtcNow,
+            });
+
+        var result = await orchestrator.GenerateStepAsync(session.SessionId, WorkflowStep.Step1_Outline, false, CancellationToken.None);
+
+        Assert.That(result.Content, Is.EqualTo("- 背景\n  - 課題\n- 目的\n  - 対象読者\n- 結論"));
+        Assert.That(result.Model, Is.EqualTo("m1-repair"));
+        llmMock.Verify(x => x.GenerateAsync(It.IsAny<Prompt>(), It.IsAny<CancellationToken>(), It.IsAny<int?>()), Times.Exactly(2));
+    }
+
+    [Test]
     public async Task GenerateStepAsync_Outline違反時_OutlineConstraintViolationExceptionを投げる()
     {
         var repository = new InMemoryWorkflowRepository();
@@ -162,6 +273,7 @@ public sealed class WorkflowOrchestratorTests
             orchestrator.GenerateStepAsync(session.SessionId, WorkflowStep.Step1_Outline, false, CancellationToken.None));
 
         Assert.That(ex, Is.Not.Null);
+        Assert.That(ex!.SourceKind, Is.EqualTo(OutlineViolationSource.LlmGenerated));
     }
 
     private static WorkflowOrchestrator CreateOrchestrator(

@@ -95,13 +95,25 @@ public sealed class GlobalExceptionHandler : IMiddleware
             });
         }
 
-        if (exception is OutlineConstraintViolationException)
+        if (exception is OutlineConstraintViolationException outlineViolation)
         {
+            if (outlineViolation.SourceKind == OutlineViolationSource.LlmGenerated)
+            {
+                return (StatusCodes.Status502BadGateway, new ErrorResponse
+                {
+                    ErrorCode = "OUTLINE_GENERATION_INVALID",
+                    Message = "アウトライン生成結果が制約を満たしませんでした。まず再生成を試してください。繰り返す場合は不具合の可能性があります",
+                    Details = _hostEnvironment.IsDevelopment() ? outlineViolation.Message : null,
+                    RequestId = requestId,
+                    IsRetryable = true,
+                });
+            }
+
             return (StatusCodes.Status400BadRequest, new ErrorResponse
             {
                 ErrorCode = "OUTLINE_CONSTRAINT_VIOLATION",
-                Message = "アウトラインが長すぎるか形式が不正です",
-                Details = _hostEnvironment.IsDevelopment() ? exception.Message : null,
+                Message = "アウトラインの形式が不正です。編集してから再度確定してください",
+                Details = _hostEnvironment.IsDevelopment() ? outlineViolation.Message : null,
                 RequestId = requestId,
                 IsRetryable = false,
             });
