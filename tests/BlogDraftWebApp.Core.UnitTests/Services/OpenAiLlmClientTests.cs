@@ -152,7 +152,7 @@ public sealed class OpenAiLlmClientTests
         {
             ApiKey = "sk-test",
             BaseUrl = "https://api.openai.com/v1",
-            Model = "gpt-test",
+            Model = "gpt-4.1-test",
             MaxTokens = 4096,
             RequestTimeoutSeconds = 30,
         });
@@ -199,5 +199,38 @@ public sealed class OpenAiLlmClientTests
         _ = await client.GenerateAsync(prompt, CancellationToken.None, maxOutputTokens: 350);
 
         Assert.That(actualTemperature, Is.EqualTo(0.2).Within(0.0001));
+    }
+
+    [Test]
+    public async Task GenerateAsync_gpt5系モデルでは温度を送信しない()
+    {
+        var hasTemperature = false;
+
+        var handler = new StubHttpMessageHandler(async (request, _) =>
+        {
+            var body = await request.Content!.ReadAsStringAsync();
+            using var json = JsonDocument.Parse(body);
+            hasTemperature = json.RootElement.TryGetProperty("temperature", out JsonElement _);
+
+            const string response = "{\"choices\":[{\"message\":{\"content\":\"- a\\n- b\\n- c\\n- d\\n- e\"}}]}";
+            return StubHttpMessageHandler.Json(HttpStatusCode.OK, response);
+        });
+
+        var httpClient = new HttpClient(handler);
+        var options = Options.Create(new LlmOptions
+        {
+            ApiKey = "sk-test",
+            BaseUrl = "https://api.openai.com/v1",
+            Model = "gpt-5.5",
+            MaxTokens = 4096,
+            RequestTimeoutSeconds = 30,
+        });
+
+        var client = new OpenAiLlmClient(httpClient, NullLogger<OpenAiLlmClient>.Instance, options);
+        var prompt = new Prompt { SystemMessage = "sys", UserOverview = "## アウトライン生成（厳格フォーマット）\n- rule" };
+
+        _ = await client.GenerateAsync(prompt, CancellationToken.None, maxOutputTokens: 350);
+
+        Assert.That(hasTemperature, Is.False);
     }
 }

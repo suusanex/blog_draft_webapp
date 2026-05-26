@@ -54,7 +54,7 @@ public sealed class OpenAiLlmClient : ILlmClient
                 },
             };
 
-            if (ShouldUseLowTemperature(prompt))
+            if (ShouldUseLowTemperature(prompt) && SupportsCustomTemperature(_options.Model))
             {
                 body["temperature"] = 0.2;
             }
@@ -149,6 +149,11 @@ public sealed class OpenAiLlmClient : ILlmClient
     {
         return prompt.UserOverview.Contains("アウトライン生成（厳格フォーマット）", StringComparison.Ordinal)
             || prompt.UserOverview.Contains("アウトライン再整形", StringComparison.Ordinal);
+    }
+
+    private static bool SupportsCustomTemperature(string model)
+    {
+        return !model.StartsWith("gpt-5", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string BuildUserContent(Prompt prompt)
