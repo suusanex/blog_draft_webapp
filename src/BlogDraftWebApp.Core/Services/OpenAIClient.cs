@@ -11,7 +11,8 @@ namespace BlogDraftWebApp.Core.Services;
 
 public sealed class OpenAiLlmClient : ILlmClient
 {
-    private const int WorkflowMaxTimeoutSeconds = 60;
+    private const int WorkflowMaxTimeoutSeconds = 600;
+    private const int ErrorBodyMaxLength = 2000;
 
     private readonly HttpClient _httpClient;
     private readonly ILogger<OpenAiLlmClient> _logger;
@@ -26,10 +27,9 @@ public sealed class OpenAiLlmClient : ILlmClient
 
     public async Task<Draft> GenerateAsync(Prompt prompt, CancellationToken cancellationToken, int? maxOutputTokens = null)
     {
-        var configuredSeconds = _options.RequestTimeoutSeconds <= 0
+        var timeoutSeconds = _options.RequestTimeoutSeconds <= 0
             ? WorkflowMaxTimeoutSeconds
-            : _options.RequestTimeoutSeconds;
-        var timeoutSeconds = Math.Min(configuredSeconds, WorkflowMaxTimeoutSeconds);
+            : Math.Min(_options.RequestTimeoutSeconds, WorkflowMaxTimeoutSeconds);
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         cts.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds));
 
@@ -84,15 +84,27 @@ public sealed class OpenAiLlmClient : ILlmClient
             using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cts.Token);
             if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
             {
+                var responseBody = await ReadErrorBodyAsync(response, cts.Token);
+                _logger.LogError(
+                    "LLM authentication failed. StatusCode={StatusCode}, Body={Body}",
+                    (int)response.StatusCode,
+                    responseBody);
                 throw new ConfigurationException("LLM authentication failed.");
             }
 
             if (!response.IsSuccessStatusCode)
             {
+                var responseBody = await ReadErrorBodyAsync(response, cts.Token);
                 var isRetryable = response.StatusCode is HttpStatusCode.TooManyRequests
                     or HttpStatusCode.ServiceUnavailable
                     or HttpStatusCode.GatewayTimeout
                     or HttpStatusCode.BadGateway;
+
+                _logger.LogError(
+                    "LLM request failed. StatusCode={StatusCode}, Retryable={IsRetryable}, Body={Body}",
+                    (int)response.StatusCode,
+                    isRetryable,
+                    responseBody);
 
                 throw new LlmException("LLM_ERROR", "LLM サービスでエラーが発生しました", isRetryable);
             }
@@ -123,6 +135,7 @@ public sealed class OpenAiLlmClient : ILlmClient
         }
         catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
         {
+            _logger.LogError(ex, "LLM request timed out. TimeoutSeconds={TimeoutSeconds}", timeoutSeconds);
             throw new LlmException("LLM_TIMEOUT", "生成に時間がかかりすぎています。もう一度お試しください", true, ex);
         }
         catch (Exception ex) when (ex is not ConfigurationException and not LlmException)
@@ -148,5 +161,18 @@ public sealed class OpenAiLlmClient : ILlmClient
 
         parts.Add(prompt.UserOverview);
         return string.Join("\n\n", parts);
+    }
+
+    private static async Task<string> ReadErrorBodyAsync(HttpResponseMessage response, CancellationToken cancellationToken)
+    {
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+        if (string.IsNullOrWhiteSpace(body))
+        {
+            return "(empty)";
+        }
+
+        return body.Length <= ErrorBodyMaxLength
+            ? body
+            : body[..ErrorBodyMaxLength] + "...";
     }
 }
