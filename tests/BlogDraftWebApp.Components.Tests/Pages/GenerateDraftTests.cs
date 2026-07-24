@@ -52,6 +52,18 @@ public sealed class GenerateDraftTests
     }
 
     [Test]
+    public void InputGuide_DescribesCentralPointsInsteadOfCompleteOutline()
+    {
+        ConfigureHttpClient(CreateJsonResponse(HttpStatusCode.OK, new GenerateDraftResponse { Draft = "# Title" }));
+
+        var cut = _context.RenderComponent<GenerateDraft>();
+
+        Assert.That(cut.Markup, Does.Contain("この記事で伝えたいポイント"));
+        Assert.That(cut.Markup, Does.Contain("完全な目次ではなく"));
+        Assert.That(cut.Markup, Does.Contain("観測・判断・躓き"));
+    }
+
+    [Test]
     public void GenerateAsync_Success_ShowsDraftAndPreview()
     {
         ConfigureHttpClient(CreateJsonResponse(HttpStatusCode.OK, new GenerateDraftResponse

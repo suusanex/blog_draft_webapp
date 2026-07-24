@@ -60,6 +60,50 @@ public sealed class DraftEndpointsTests
     }
 
     [Test]
+    public async Task DraftPreview_AndDraftGeneration_UseTheSamePrompt()
+    {
+        await using var factory = new TestWebApplicationFactory();
+
+        var overview = "This is a central point for the article.";
+        var chunks = new List<RAGChunk>
+        {
+            new()
+            {
+                Text = "A past article example.",
+                Score = 0.9,
+                SourceTitle = "example",
+                SourceUrl = "https://example.com/article",
+            },
+        };
+        Prompt? generationPrompt = null;
+
+        factory.RetrievalServiceMock
+            .Setup(x => x.RetrieveAsync(overview, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new RetrievalResult(chunks, null));
+        factory.LlmClientMock
+            .Setup(x => x.GenerateAsync(It.IsAny<Prompt>(), It.IsAny<CancellationToken>()))
+            .Callback<Prompt, CancellationToken>((prompt, _) => generationPrompt = prompt)
+            .ReturnsAsync(new Draft
+            {
+                Content = new string('x', 101),
+                Model = "test-model",
+                GeneratedAt = DateTimeOffset.UtcNow,
+            });
+
+        using var http = factory.CreateClient();
+
+        var draftResponse = await http.PostAsJsonAsync("/draft", new GenerateDraftRequest { Overview = overview });
+        var previewResponse = await http.PostAsJsonAsync("/draft/preview", new PreviewPromptRequest { Overview = overview });
+        var preview = await previewResponse.Content.ReadFromJsonAsync<PreviewPromptResponse>();
+
+        Assert.That(draftResponse.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.That(previewResponse.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.That(generationPrompt, Is.Not.Null);
+        Assert.That(preview, Is.Not.Null);
+        Assert.That(preview!.Prompt, Is.EqualTo(generationPrompt!.FullPrompt));
+    }
+
+    [Test]
     public async Task Draft_ReturnsRagError_WhenRetrievalFails()
     {
         await using var factory = new TestWebApplicationFactory();
