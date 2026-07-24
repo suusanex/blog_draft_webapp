@@ -78,6 +78,34 @@ RAG を無効化する場合:
 dotnet test -c Release
 ```
 
+## 生成品質の固定評価
+
+`evaluation/cases.json` にある匿名化済みの固定ケースを使い、出力長、Markdown の見出し・箇条書き・コードブロック数、期待ポイントの被覆、禁止範囲の候補を計測できます。
+
+外部サービスを呼ばないスタブ評価:
+
+```powershell
+dotnet run --project src/BlogDraftWebApp.QualityEvaluation -- run --mode stub --prompt-version local-stub --rag both
+```
+
+実 LLM と Azure AI Search を使った RAG 有無の比較:
+
+```powershell
+dotnet run --project src/BlogDraftWebApp.QualityEvaluation -- run --mode live --prompt-version issue-1-before --rag both
+```
+
+live モードは Web アプリと同じ `appsettings.json`、Development User Secrets、環境変数、Azure Key Vault、コマンドライン引数の順で設定を読み込みます。評価ツール固有の引数の後へ、`--OpenAI:Model MODEL_NAME` などの ASP.NET Core 構成引数を指定できます。OpenAI API キーがない場合は外部接続せず skip し、RAG 設定がない場合は RAG enabled 側だけを skip します。
+
+Issue #1 の変更前後など、2つの実行結果を比較する場合:
+
+```powershell
+dotnet run --project src/BlogDraftWebApp.QualityEvaluation -- compare `
+  --baseline artifacts/quality-evaluation/BEFORE/run-report.json `
+  --candidate artifacts/quality-evaluation/AFTER/run-report.json
+```
+
+評価結果は既定で `artifacts/quality-evaluation/` に JSON と Markdown で出力され、このディレクトリは Git 管理対象外です。生成本文は人手レビュー用に保存されますが、API キー、プロンプト全文、文体カード、RAG 本文・URL・タイトルは保存されません。RAG 出典は不可逆な SHA-256 識別子としてのみ記録されます。実ユーザーの入力を固定ケースへ追加しないでください。
+
 ## ライセンス
 
 このリポジトリは [LICENSE](LICENSE) を参照してください。
