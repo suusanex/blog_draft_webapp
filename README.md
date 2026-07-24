@@ -38,8 +38,9 @@ dotnet run
 
 - `OpenAI:ApiKey`
 - `OpenAI:Model`
-- `StyleCard:SystemPrompt`
-- `StyleCard:Content`
+- `StyleCard:Content` または `StyleCard:FilePath`
+
+`StyleCard:SystemPrompt` は任意です。指定した場合は文体カードとともに LLM へ渡します。
 
 環境変数で設定する場合は `:` を `__` に置き換えます。
 
@@ -47,7 +48,6 @@ dotnet run
 
 - `OpenAI__ApiKey`
 - `OpenAI__Model`
-- `StyleCard__SystemPrompt`
 - `StyleCard__Content`
 
 ### 任意（RAG: Azure AI Search）
@@ -103,6 +103,19 @@ dotnet run --project src/BlogDraftWebApp.QualityEvaluation -- compare `
   --baseline artifacts/quality-evaluation/BEFORE/run-report.json `
   --candidate artifacts/quality-evaluation/AFTER/run-report.json
 ```
+
+### 評価結果の読み方
+
+まず `run-report.md` の各ケースの生成本文を読み、次に JSON / Markdown の指標で傾向を確認します。指標は人手レビューの優先順位を付けるためのものであり、単独で記事の良否を決めるものではありません。
+
+1. **実行範囲を確認する**: `Results` に `RAG disabled` と `RAG enabled` の両方があり、`RAG deltas` がケース数分あるかを確認します。enabled が skip されている、または disabled だけを実行した場合、そのレポートはプロンプト単体の基準値であり、RAG の効果・副作用は判断できません。
+2. **中心ポイントの被覆を見る**: `Focal coverage` は、各ケースの `expectedFocalPoints.anyOf` にある語句が本文へ現れた割合です。低いケースは、中心ポイントの見落とし、言い換えによる測定上の取りこぼし、またはケース側のキーワード不足のいずれかです。本文を読み、同じ種類のポイントが繰り返し抜けている場合を改善候補にします。
+3. **必要な補足を確認する**: `Supporting coverage` が低い場合、入力の結論を理解するための原因・比較条件・限定範囲が省かれている可能性があります。中心ポイントを繰り返すだけの記事になっていないかを確認します。
+4. **長さと構成を確認する**: `Chars` が `targetLengthRange` 外なら、短すぎて説明不足か、長すぎて不要な一般論が増えたかを本文で判断します。`Headings` が上限内で、`Forbidden candidates` と `Generic structure overuse` がないことは、過剰な網羅記事へ寄っていないことを示す補助的な良い兆候です。目標文字数はケースごとの目安であり、すべてのケースが同じ方向へ外れる場合はプロンプトだけでなくケースの範囲設定も見直します。
+5. **RAG の差分を見る**: `RAG deltas` は enabled から disabled を引いた値です。文字数・見出し数の大幅な正の差、新しい禁止範囲候補、中心ポイント被覆の低下は、RAG が不要な情報を増やしている疑いがあります。逆に、補足や中心ポイントの被覆が上がり、長さや禁止範囲が悪化していなければ RAG の効果を確認できます。
+6. **変更前後を比較する**: `comparison-report.md` の値は candidate から baseline を引いた差です。文字数・見出し数が減っても、被覆率や必要な補足が維持・改善されているかを確認します。新しい禁止範囲候補は優先して本文をレビューします。
+
+判断例として、「禁止範囲候補がなく、見出し数も上限内だが、中心・補足ポイントの被覆が低く、文字数も下限未満」という結果は、一般論を増やす必要はない一方で、入力の結論を支える説明が不足している可能性を示します。
 
 評価結果は既定で `artifacts/quality-evaluation/` に JSON と Markdown で出力され、このディレクトリは Git 管理対象外です。生成本文は人手レビュー用に保存されますが、API キー、プロンプト全文、文体カード、RAG 本文・URL・タイトルは保存されません。RAG 出典は不可逆な SHA-256 識別子としてのみ記録されます。実ユーザーの入力を固定ケースへ追加しないでください。
 

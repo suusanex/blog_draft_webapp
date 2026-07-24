@@ -71,10 +71,6 @@ public static class LiveConfiguration
         var styleOptions = configuration.GetSection("StyleCard").Get<StyleCardOptions>() ?? new StyleCardOptions();
         new StyleCardPostConfigure(NullLogger<StyleCardPostConfigure>.Instance).PostConfigure(null, styleOptions);
         ValidateOptions("StyleCard", new StyleCardOptionsValidator().Validate(null, styleOptions));
-        if (string.IsNullOrWhiteSpace(styleOptions.SystemPrompt))
-        {
-            throw new InvalidOperationException("StyleCard:SystemPrompt is required for live evaluation.");
-        }
 
         var ragOptions = configuration.GetSection("AzureAISearch").Get<RagOptions>() ?? new RagOptions { Enabled = false };
         var ragValidation = new RagOptionsValidator().Validate(null, ragOptions);
