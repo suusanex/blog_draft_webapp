@@ -29,9 +29,9 @@ public sealed class AzureAISearchServiceTests
             .Setup(x => x.SearchAsync(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<AzureSearchHit>
             {
-                new(0.9, new Dictionary<string, object?> { ["content"] = "text1", ["url"] = "u1", ["title"] = "t1" }),
-                new(0.6, new Dictionary<string, object?> { ["content"] = "low", ["url"] = "u2", ["title"] = "t2" }),
-                new(0.95, new Dictionary<string, object?> { ["content"] = "dup", ["url"] = "u1", ["title"] = "t1" }),
+                new(0.9, new Dictionary<string, object?> { ["content"] = "text1", ["metadata_storage_path"] = "u1", ["title_Data_Column"] = "t1" }),
+                new(0.6, new Dictionary<string, object?> { ["content"] = "low", ["metadata_storage_path"] = "u2", ["title_Data_Column"] = "t2" }),
+                new(0.95, new Dictionary<string, object?> { ["content"] = "dup", ["metadata_storage_path"] = "u1", ["title_Data_Column"] = "t1" }),
             });
 
         var mockFactory = new Mock<IAzureSearchClientFactory>(MockBehavior.Strict);
@@ -44,6 +44,7 @@ public sealed class AzureAISearchServiceTests
         Assert.That(result.Warning, Is.Null);
         Assert.That(result.Chunks.Count, Is.EqualTo(1));
         Assert.That(result.Chunks[0].Text, Is.EqualTo("text1"));
+        Assert.That(result.Chunks[0].SourceTitle, Is.EqualTo("t1"));
         Assert.That(result.Chunks[0].SourceUrl, Is.EqualTo("u1"));
     }
 

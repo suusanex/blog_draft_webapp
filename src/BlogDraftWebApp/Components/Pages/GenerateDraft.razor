@@ -4,6 +4,7 @@
 @using System.Net.Http.Json
 @using System.ComponentModel.DataAnnotations
 @using BlogDraftWebApp.Api.Models
+@using BlogDraftWebApp.Core.Models
 @using Markdig
 @inject IHttpClientFactory HttpClientFactory
 @inject IJSRuntime JS
@@ -17,7 +18,8 @@
     <DataAnnotationsValidator />
 
     <div class="mb-3">
-        <label class="form-label">記事の概要</label>
+        <label class="form-label">この記事で伝えたいポイント</label>
+        <div class="form-text mb-2">完全な目次ではなく、今回特に伝えたい観測・判断・躓きなどを入力してください。</div>
         <InputTextArea class="form-control" Value="@_model.Overview" ValueChanged="OnOverviewChanged" ValueExpression="(() => _model.Overview)" rows="10" />
         <ValidationMessage For="() => _model.Overview" />
     </div>
@@ -86,9 +88,9 @@
 @code {
     private sealed class GenerateDraftViewModel
     {
-        [Required(ErrorMessage = "記事の概要を入力してください")]
-        [MinLength(10, ErrorMessage = "概要は 10 文字以上入力してください")]
-        [MaxLength(5000, ErrorMessage = "概要は 5000 文字以内で入力してください")]
+        [Required(ErrorMessage = BlogOverview.RequiredErrorMessage)]
+        [MinLength(BlogOverview.MinimumLength, ErrorMessage = BlogOverview.MinimumLengthErrorMessage)]
+        [MaxLength(BlogOverview.MaximumLength, ErrorMessage = BlogOverview.MaximumLengthErrorMessage)]
         public string Overview { get; set; } = string.Empty;
     }
 

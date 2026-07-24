@@ -2,6 +2,7 @@ using System.Net;
 using System.Text.Json;
 using BlogDraftWebApp.Api.Models;
 using BlogDraftWebApp.Components.Pages;
+using BlogDraftWebApp.Core.Models;
 using BlogDraftWebApp.Tests.Common.Http;
 using Bunit;
 using Microsoft.AspNetCore.Components;
@@ -49,6 +50,31 @@ public sealed class GenerateDraftTests
 
         var button = cut.Find("button");
         Assert.That(button.HasAttribute("disabled"), Is.False);
+    }
+
+    [Test]
+    public void InputGuide_DescribesCentralPointsInsteadOfCompleteOutline()
+    {
+        ConfigureHttpClient(CreateJsonResponse(HttpStatusCode.OK, new GenerateDraftResponse { Draft = "# Title" }));
+
+        var cut = _context.RenderComponent<GenerateDraft>();
+
+        Assert.That(cut.Markup, Does.Contain("この記事で伝えたいポイント"));
+        Assert.That(cut.Markup, Does.Contain("完全な目次ではなく"));
+        Assert.That(cut.Markup, Does.Contain("観測・判断・躓き"));
+    }
+
+    [Test]
+    public void ShortInput_ShowsUnifiedValidationMessage()
+    {
+        ConfigureHttpClient(CreateJsonResponse(HttpStatusCode.OK, new GenerateDraftResponse { Draft = "# Title" }));
+
+        var cut = _context.RenderComponent<GenerateDraft>();
+        cut.Find("textarea").Change(new string('x', BlogOverview.MinimumLength - 1));
+        cut.Find("button").Click();
+
+        cut.WaitForAssertion(() =>
+            Assert.That(cut.Markup, Does.Contain(BlogOverview.MinimumLengthErrorMessage)));
     }
 
     [Test]
