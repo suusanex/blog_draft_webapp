@@ -87,31 +87,31 @@ public static class DraftEndpoints
             return Results.BadRequest(new ErrorResponse
             {
                 ErrorCode = "INVALID_REQUEST",
-                Message = "記事の概要を入力してください",
+                Message = BlogOverview.RequiredErrorMessage,
                 Details = env.IsDevelopment() ? "Overview field is required" : null,
                 RequestId = httpContext.TraceIdentifier,
                 IsRetryable = false,
             });
         }
 
-        if (overview.Length < 10)
+        if (overview.Length < BlogOverview.MinimumLength)
         {
             return Results.BadRequest(new ErrorResponse
             {
                 ErrorCode = "INVALID_REQUEST",
-                Message = "概要は 10 文字以上入力してください",
+                Message = BlogOverview.MinimumLengthErrorMessage,
                 Details = env.IsDevelopment() ? "Overview must be at least 10 characters" : null,
                 RequestId = httpContext.TraceIdentifier,
                 IsRetryable = false,
             });
         }
 
-        if (overview.Length > 5000)
+        if (overview.Length > BlogOverview.MaximumLength)
         {
             return Results.BadRequest(new ErrorResponse
             {
                 ErrorCode = "INVALID_REQUEST",
-                Message = "概要は 5000 文字以内で入力してください",
+                Message = BlogOverview.MaximumLengthErrorMessage,
                 Details = env.IsDevelopment() ? "Overview must be at most 5000 characters" : null,
                 RequestId = httpContext.TraceIdentifier,
                 IsRetryable = false,

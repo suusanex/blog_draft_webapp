@@ -4,6 +4,7 @@
 @using System.Net.Http.Json
 @using System.ComponentModel.DataAnnotations
 @using BlogDraftWebApp.Api.Models
+@using BlogDraftWebApp.Core.Models
 @using Markdig
 @inject IHttpClientFactory HttpClientFactory
 @inject IJSRuntime JS
@@ -87,9 +88,9 @@
 @code {
     private sealed class GenerateDraftViewModel
     {
-        [Required(ErrorMessage = "この記事で伝えたいポイントを入力してください")]
-        [MinLength(10, ErrorMessage = "伝えたいポイントは 10 文字以上入力してください")]
-        [MaxLength(5000, ErrorMessage = "伝えたいポイントは 5000 文字以内で入力してください")]
+        [Required(ErrorMessage = BlogOverview.RequiredErrorMessage)]
+        [MinLength(BlogOverview.MinimumLength, ErrorMessage = BlogOverview.MinimumLengthErrorMessage)]
+        [MaxLength(BlogOverview.MaximumLength, ErrorMessage = BlogOverview.MaximumLengthErrorMessage)]
         public string Overview { get; set; } = string.Empty;
     }
 

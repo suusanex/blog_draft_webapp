@@ -94,13 +94,43 @@ public sealed class DraftEndpointsTests
 
         var draftResponse = await http.PostAsJsonAsync("/draft", new GenerateDraftRequest { Overview = overview });
         var previewResponse = await http.PostAsJsonAsync("/draft/preview", new PreviewPromptRequest { Overview = overview });
-        var preview = await previewResponse.Content.ReadFromJsonAsync<PreviewPromptResponse>();
 
         Assert.That(draftResponse.StatusCode, Is.EqualTo(HttpStatusCode.OK));
         Assert.That(previewResponse.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+
+        var preview = await previewResponse.Content.ReadFromJsonAsync<PreviewPromptResponse>();
+
         Assert.That(generationPrompt, Is.Not.Null);
         Assert.That(preview, Is.Not.Null);
         Assert.That(preview!.Prompt, Is.EqualTo(generationPrompt!.FullPrompt));
+    }
+
+    private static IEnumerable<TestCaseData> InvalidOverviewCases()
+    {
+        foreach (var endpoint in new[] { "/draft", "/draft/preview" })
+        {
+            yield return new TestCaseData(endpoint, " ", BlogOverview.RequiredErrorMessage)
+                .SetName($"{endpoint}_EmptyOverview_ReturnsUnifiedMessage");
+            yield return new TestCaseData(endpoint, new string('x', BlogOverview.MinimumLength - 1), BlogOverview.MinimumLengthErrorMessage)
+                .SetName($"{endpoint}_ShortOverview_ReturnsUnifiedMessage");
+            yield return new TestCaseData(endpoint, new string('x', BlogOverview.MaximumLength + 1), BlogOverview.MaximumLengthErrorMessage)
+                .SetName($"{endpoint}_LongOverview_ReturnsUnifiedMessage");
+        }
+    }
+
+    [TestCaseSource(nameof(InvalidOverviewCases))]
+    public async Task DraftEndpoints_InvalidOverview_ReturnsUnifiedMessage(string endpoint, string overview, string expectedMessage)
+    {
+        await using var factory = new TestWebApplicationFactory();
+        using var http = factory.CreateClient();
+
+        var response = await http.PostAsJsonAsync(endpoint, new { Overview = overview });
+
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
+
+        var payload = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+        Assert.That(payload, Is.Not.Null);
+        Assert.That(payload!.Message, Is.EqualTo(expectedMessage));
     }
 
     [Test]

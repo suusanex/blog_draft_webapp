@@ -38,6 +38,8 @@ public sealed class PromptComposer : IPromptComposer
         sb.AppendLine("上記の入力に書かれた各項目を、記事で力を入れて伝える高重要度の中心情報として扱ってください。");
         sb.AppendLine("入力は掲載項目の完全な一覧ではありませんが、テーマを推測するためだけの断片でもありません。");
         sb.AppendLine("テーマ全般を網羅せず、中心ポイントを読者が正しく理解するために目的がある情報だけを最小限補ってください。");
+        sb.AppendLine("以下の補完可能範囲は追加を必須にするものではありません。入力だけで中心ポイントを理解できる場合は、情報を増やさないでください。");
+        sb.AppendLine("入力にコードや手順がない場合は、コード例、設定例、番号付き手順を追加しないでください。");
         sb.AppendLine();
         sb.AppendLine("### 補ってよい情報");
         sb.AppendLine();
@@ -67,6 +69,15 @@ public sealed class PromptComposer : IPromptComposer
         sb.AppendLine();
         sb.AppendLine("[文体カード]");
         sb.AppendLine(styleCard.Content);
+        sb.AppendLine();
+        sb.AppendLine("[共通編集ポリシー]");
+        sb.AppendLine("ユーザー入力に書かれた各項目を、記事で力を入れて伝える高重要度の中心情報として扱ってください。");
+        sb.AppendLine("テーマ全般を網羅せず、中心ポイントを読者が正しく理解するために目的がある情報だけを限定的に補ってください。");
+        sb.AppendLine("補完は、入力だけでは中心ポイントを誤解する場合に不可欠な情報へ限定し、入力だけで理解できる内容には情報を追加しないでください。");
+        sb.AppendLine("入力にコードや手順がない場合は、コード例、設定例、番号付き手順、周辺の実装方法を追加してはいけません。");
+        sb.AppendLine("記事として完全に見せることや網羅性を持たせることだけを目的に、一般論、未入力の機能やユースケース、全手順を追加してはいけません。");
+        sb.AppendLine("情報が不足している場合も、短く終えるのではなく、中心ポイントの理解に必要な前提、因果関係、用語説明だけを最小限補ってください。");
+        sb.AppendLine("文体カードの簡潔さや情報量を抑える方針は維持してください。必要な補完まで一律に禁止する指示と競合する場合に限り、この共通編集ポリシーを優先してください。");
         return sb.ToString().Trim();
     }
 
