@@ -216,6 +216,9 @@ public sealed class EvaluationEngine
             HeadingCountDelta = enabled.Metrics.HeadingCount - disabled.Metrics.HeadingCount,
             ListItemCountDelta = enabled.Metrics.ListItemCount - disabled.Metrics.ListItemCount,
             FocalPointCoverageRateDelta = Math.Round(enabled.Metrics.FocalPointCoverageRate - disabled.Metrics.FocalPointCoverageRate, 4),
+            SupportingTopicCoverageRateDelta = Math.Round(
+                enabled.Metrics.SupportingTopicCoverageRate - disabled.Metrics.SupportingTopicCoverageRate,
+                4),
             NewForbiddenScopeCandidates = enabled.Metrics.ForbiddenScopeCandidates
                 .Except(disabled.Metrics.ForbiddenScopeCandidates, StringComparer.Ordinal)
                 .ToList(),

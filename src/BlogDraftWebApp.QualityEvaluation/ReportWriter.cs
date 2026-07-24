@@ -68,8 +68,8 @@ public static class ReportWriter
         builder.AppendLine();
         builder.AppendLine("## Results");
         builder.AppendLine();
-        builder.AppendLine("| Case | RAG | Status | Chars | Headings | Lists | Focal coverage | Forbidden candidates |");
-        builder.AppendLine("| --- | --- | --- | ---: | ---: | ---: | ---: | --- |");
+        builder.AppendLine("| Case | RAG | Status | Chars | Headings | Lists | Code blocks | Focal coverage | Supporting coverage | Forbidden candidates |");
+        builder.AppendLine("| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |");
         foreach (var result in report.Results)
         {
             var metrics = result.Metrics;
@@ -78,7 +78,9 @@ public static class ReportWriter
                 $"{metrics?.CharacterCount.ToString(CultureInfo.InvariantCulture) ?? "-"} | " +
                 $"{metrics?.HeadingCount.ToString(CultureInfo.InvariantCulture) ?? "-"} | " +
                 $"{metrics?.ListItemCount.ToString(CultureInfo.InvariantCulture) ?? "-"} | " +
+                $"{metrics?.CodeBlockCount.ToString(CultureInfo.InvariantCulture) ?? "-"} | " +
                 $"{metrics?.FocalPointCoverageRate.ToString("P0", CultureInfo.InvariantCulture) ?? "-"} | " +
+                $"{metrics?.SupportingTopicCoverageRate.ToString("P0", CultureInfo.InvariantCulture) ?? "-"} | " +
                 $"{Escape(metrics is null ? result.Message ?? string.Empty : string.Join(", ", metrics.ForbiddenScopeCandidates))} |");
         }
 
@@ -87,13 +89,14 @@ public static class ReportWriter
             builder.AppendLine();
             builder.AppendLine("## RAG deltas");
             builder.AppendLine();
-            builder.AppendLine("| Case | Characters | Headings | Lists | Focal coverage | New forbidden candidates |");
-            builder.AppendLine("| --- | ---: | ---: | ---: | ---: | --- |");
+            builder.AppendLine("| Case | Characters | Headings | Lists | Focal coverage | Supporting coverage | New forbidden candidates |");
+            builder.AppendLine("| --- | ---: | ---: | ---: | ---: | ---: | --- |");
             foreach (var delta in report.RagDeltas)
             {
                 builder.AppendLine(
                     $"| {Escape(delta.CaseId)} | {delta.CharacterCountDelta:+#;-#;0} | {delta.HeadingCountDelta:+#;-#;0} | " +
                     $"{delta.ListItemCountDelta:+#;-#;0} | {delta.FocalPointCoverageRateDelta:+0.00%;-0.00%;0.00%} | " +
+                    $"{delta.SupportingTopicCoverageRateDelta:+0.00%;-0.00%;0.00%} | " +
                     $"{Escape(string.Join(", ", delta.NewForbiddenScopeCandidates))} |");
             }
         }
@@ -120,8 +123,8 @@ public static class ReportWriter
         builder.AppendLine($"- Baseline: `{Escape(report.BaselinePromptVersion)}`");
         builder.AppendLine($"- Candidate: `{Escape(report.CandidatePromptVersion)}`");
         builder.AppendLine();
-        builder.AppendLine("| Case | RAG | Status | Characters | Headings | Lists | Focal coverage | New forbidden candidates |");
-        builder.AppendLine("| --- | --- | --- | ---: | ---: | ---: | ---: | --- |");
+        builder.AppendLine("| Case | RAG | Status | Characters | Headings | Lists | Focal coverage | Supporting coverage | New forbidden candidates |");
+        builder.AppendLine("| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | --- |");
         foreach (var comparison in report.Comparisons)
         {
             var delta = comparison.Delta;
@@ -130,6 +133,7 @@ public static class ReportWriter
                 $"{Escape(comparison.BaselineStatus)} → {Escape(comparison.CandidateStatus)} | " +
                 $"{Format(delta?.CharacterCount)} | {Format(delta?.HeadingCount)} | {Format(delta?.ListItemCount)} | " +
                 $"{(delta is null ? "-" : delta.FocalPointCoverageRate.ToString("+0.00%;-0.00%;0.00%", CultureInfo.InvariantCulture))} | " +
+                $"{(delta is null ? "-" : delta.SupportingTopicCoverageRate.ToString("+0.00%;-0.00%;0.00%", CultureInfo.InvariantCulture))} | " +
                 $"{Escape(string.Join(", ", comparison.NewForbiddenScopeCandidates))} |");
         }
 

@@ -7,6 +7,7 @@ public sealed class RunOptions
     public string Rag { get; init; } = "both";
     public string? CasesPath { get; init; }
     public string? OutputDirectory { get; init; }
+    public bool Verbose { get; init; }
     public List<string> ConfigurationArguments { get; init; } = [];
 }
 
@@ -15,13 +16,15 @@ public sealed class CompareOptions
     public string BaselinePath { get; init; } = string.Empty;
     public string CandidatePath { get; init; } = string.Empty;
     public string? OutputDirectory { get; init; }
+    public bool Verbose { get; init; }
 }
 
 public static class CommandLine
 {
     public static RunOptions ParseRun(string[] args)
     {
-        var values = ParseKnown(args, ["--mode", "--prompt-version", "--rag", "--cases", "--output"], out var remaining);
+        var verbose = ExtractFlag(args, "--verbose", out var filteredArgs);
+        var values = ParseKnown(filteredArgs, ["--mode", "--prompt-version", "--rag", "--cases", "--output"], out var remaining);
         var mode = Get(values, "--mode", "stub").ToLowerInvariant();
         var rag = Get(values, "--rag", "both").ToLowerInvariant();
         var promptVersion = Get(values, "--prompt-version", string.Empty);
@@ -48,13 +51,15 @@ public static class CommandLine
             PromptVersion = promptVersion,
             CasesPath = GetOptional(values, "--cases"),
             OutputDirectory = GetOptional(values, "--output"),
+            Verbose = verbose,
             ConfigurationArguments = remaining,
         };
     }
 
     public static CompareOptions ParseCompare(string[] args)
     {
-        var values = ParseKnown(args, ["--baseline", "--candidate", "--output"], out var remaining);
+        var verbose = ExtractFlag(args, "--verbose", out var filteredArgs);
+        var values = ParseKnown(filteredArgs, ["--baseline", "--candidate", "--output"], out var remaining);
         if (remaining.Count > 0)
         {
             throw new ArgumentException($"Unknown argument: {remaining[0]}");
@@ -72,14 +77,38 @@ public static class CommandLine
             BaselinePath = baseline,
             CandidatePath = candidate,
             OutputDirectory = GetOptional(values, "--output"),
+            Verbose = verbose,
         };
     }
 
+    public static bool HasVerbose(string[] args) =>
+        args.Any(x => string.Equals(x, "--verbose", StringComparison.OrdinalIgnoreCase));
+
     public static string Usage => """
         Usage:
-          BlogDraftWebApp.QualityEvaluation run --mode stub|live --prompt-version <label> [--rag both|enabled|disabled] [--cases <path>] [--output <directory>] [configuration arguments]
-          BlogDraftWebApp.QualityEvaluation compare --baseline <report.json> --candidate <report.json> [--output <directory>]
+          BlogDraftWebApp.QualityEvaluation run --mode stub|live --prompt-version <label> [--rag both|enabled|disabled] [--cases <path>] [--output <directory>] [--verbose] [configuration arguments]
+          BlogDraftWebApp.QualityEvaluation compare --baseline <report.json> --candidate <report.json> [--output <directory>] [--verbose]
         """;
+
+    private static bool ExtractFlag(string[] args, string flag, out string[] remaining)
+    {
+        var found = false;
+        var filtered = new List<string>(args.Length);
+        foreach (var arg in args)
+        {
+            if (string.Equals(arg, flag, StringComparison.OrdinalIgnoreCase))
+            {
+                found = true;
+            }
+            else
+            {
+                filtered.Add(arg);
+            }
+        }
+
+        remaining = filtered.ToArray();
+        return found;
+    }
 
     private static Dictionary<string, string> ParseKnown(
         string[] args,

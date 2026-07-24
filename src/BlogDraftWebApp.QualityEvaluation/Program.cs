@@ -4,6 +4,7 @@ public static class Program
 {
     public static async Task<int> Main(string[] args)
     {
+        var verbose = CommandLine.HasVerbose(args);
         try
         {
             if (args.Length == 0)
@@ -23,7 +24,7 @@ public static class Program
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine(ex.Message);
+            Console.Error.WriteLine(verbose ? ex.ToString() : ex.Message);
             return 2;
         }
     }

@@ -93,6 +93,7 @@ public sealed class RagDelta
     public int HeadingCountDelta { get; init; }
     public int ListItemCountDelta { get; init; }
     public double FocalPointCoverageRateDelta { get; init; }
+    public double SupportingTopicCoverageRateDelta { get; init; }
     public List<string> NewForbiddenScopeCandidates { get; init; } = [];
 }
 
@@ -117,6 +118,7 @@ public sealed class MetricDelta
     public int HeadingCount { get; init; }
     public int ListItemCount { get; init; }
     public double FocalPointCoverageRate { get; init; }
+    public double SupportingTopicCoverageRate { get; init; }
 }
 
 public sealed class CaseComparison
