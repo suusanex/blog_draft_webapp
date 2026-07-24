@@ -1,0 +1,222 @@
+{
+  "schemaVersion": 1,
+  "version": "2026-07-24-v1",
+  "cases": [
+    {
+      "id": "experiment-001",
+      "category": "experiment-results",
+      "input": "架空の画像変換ツールで圧縮率を60%にすると、見た目を保ったままファイルサイズが半分になった。80%では差が小さかった。",
+      "expectedFocalPoints": [
+        { "name": "60%設定の結果", "anyOf": ["圧縮率を60%", "60%にすると"] },
+        { "name": "ファイルサイズ半減", "anyOf": ["ファイルサイズが半分", "サイズが半分"] }
+      ],
+      "requiredSupportingTopics": [
+        { "name": "80%との比較", "anyOf": ["80%では差が小さい", "80%では差が小さかった"] }
+      ],
+      "forbiddenScopes": [
+        { "name": "画像形式の網羅的紹介", "patterns": ["画像形式をすべて紹介", "各画像形式の特徴"] },
+        { "name": "一般的な導入手順", "patterns": ["インストールから始め", "導入手順を最初から"] }
+      ],
+      "maxHeadingCount": 4,
+      "targetLengthRange": { "min": 400, "max": 1800 }
+    },
+    {
+      "id": "experiment-002",
+      "category": "experiment-results",
+      "input": "架空のログ集計処理を100件、1000件、10000件で試した。10000件だけ処理時間が急増し、キャッシュを有効にすると改善した。",
+      "expectedFocalPoints": [
+        { "name": "10000件での急増", "anyOf": ["10000件だけ処理時間が急増", "10000件で処理時間が急増"] },
+        { "name": "キャッシュによる改善", "anyOf": ["キャッシュを有効にすると改善", "キャッシュで改善"] }
+      ],
+      "requiredSupportingTopics": [
+        { "name": "比較した件数", "anyOf": ["100件、1000件、10000件", "100件1000件10000件"] }
+      ],
+      "forbiddenScopes": [
+        { "name": "キャッシュ方式の全機能紹介", "patterns": ["キャッシュ方式を網羅", "すべてのキャッシュ戦略"] },
+        { "name": "一般的な性能改善一覧", "patterns": ["性能改善の方法一覧", "一般的な最適化手法"] }
+      ],
+      "maxHeadingCount": 4,
+      "targetLengthRange": { "min": 500, "max": 2000 }
+    },
+    {
+      "id": "trouble-001",
+      "category": "troubleshooting",
+      "input": "架空のCLIで設定ファイルを相対パス指定すると、サービス起動時だけ見つからなかった。実行ディレクトリではなく設定ファイル基準の絶対パスに直して解決した。",
+      "expectedFocalPoints": [
+        { "name": "サービス起動時だけ失敗", "anyOf": ["サービス起動時だけ見つからなかった", "サービス起動時だけ"] },
+        { "name": "絶対パスで解決", "anyOf": ["設定ファイル基準の絶対パス", "絶対パスに直して解決"] }
+      ],
+      "requiredSupportingTopics": [
+        { "name": "相対パスの基準差", "anyOf": ["実行ディレクトリではなく", "相対パス"] }
+      ],
+      "forbiddenScopes": [
+        { "name": "CLI全機能紹介", "patterns": ["CLIの全機能", "すべてのコマンド"] },
+        { "name": "OS別導入手順", "patterns": ["Windowsへのインストール", "macOSへのインストール"] }
+      ],
+      "maxHeadingCount": 4,
+      "targetLengthRange": { "min": 500, "max": 1800 }
+    },
+    {
+      "id": "trouble-002",
+      "category": "troubleshooting",
+      "input": "架空の通知APIが午前0時だけ401を返した。日付更新後も前日の署名を再利用していたのが原因で、日付単位で署名キャッシュを破棄すると直った。",
+      "expectedFocalPoints": [
+        { "name": "午前0時の401", "anyOf": ["午前0時だけ401", "0時だけ401"] },
+        { "name": "署名キャッシュ破棄", "anyOf": ["日付単位で署名キャッシュを破棄", "署名キャッシュを破棄"] }
+      ],
+      "requiredSupportingTopics": [
+        { "name": "前日の署名再利用", "anyOf": ["前日の署名を再利用", "前日分の署名"] }
+      ],
+      "forbiddenScopes": [
+        { "name": "認証方式の一般解説", "patterns": ["認証方式の種類", "OAuthの完全ガイド"] },
+        { "name": "通知API全機能紹介", "patterns": ["通知APIの全機能", "通知機能を網羅"] }
+      ],
+      "maxHeadingCount": 4,
+      "targetLengthRange": { "min": 500, "max": 1800 }
+    },
+    {
+      "id": "decision-001",
+      "category": "comparison-decision",
+      "input": "架空の定期処理で方式Aと方式Bを比較した。方式Aは設定が簡単だが再試行できず、失敗時の復旧を優先して方式Bを採用した。",
+      "expectedFocalPoints": [
+        { "name": "方式Bを採用", "anyOf": ["方式Bを採用", "方式Bに決め"] },
+        { "name": "復旧を優先", "anyOf": ["失敗時の復旧を優先", "復旧を優先"] }
+      ],
+      "requiredSupportingTopics": [
+        { "name": "方式Aの制約", "anyOf": ["方式Aは設定が簡単だが再試行できず", "方式Aは再試行できない"] }
+      ],
+      "forbiddenScopes": [
+        { "name": "全方式の比較表", "patterns": ["全方式を比較", "方式Cと方式D"] },
+        { "name": "製品選定一般論", "patterns": ["製品選定の一般的な手順", "選定基準を網羅"] }
+      ],
+      "maxHeadingCount": 4,
+      "targetLengthRange": { "min": 500, "max": 1800 }
+    },
+    {
+      "id": "decision-002",
+      "category": "comparison-decision",
+      "input": "架空のデータ保存先としてローカルJSONと軽量DBを比較し、検索条件が増える予定なので軽量DBを選んだ。単純な書き出し速度はJSONの方が速かった。",
+      "expectedFocalPoints": [
+        { "name": "軽量DBを選択", "anyOf": ["軽量DBを選んだ", "軽量DBを採用"] },
+        { "name": "検索条件の増加", "anyOf": ["検索条件が増える予定", "検索条件の増加"] }
+      ],
+      "requiredSupportingTopics": [
+        { "name": "JSONの速度", "anyOf": ["書き出し速度はJSONの方が速かった", "JSONの方が速い"] }
+      ],
+      "forbiddenScopes": [
+        { "name": "データベース製品一覧", "patterns": ["データベース製品一覧", "主要DBをすべて比較"] },
+        { "name": "DB設計完全ガイド", "patterns": ["データベース設計の完全ガイド", "正規化を最初から"] }
+      ],
+      "maxHeadingCount": 4,
+      "targetLengthRange": { "min": 500, "max": 1800 }
+    },
+    {
+      "id": "short-001",
+      "category": "very-short-input",
+      "input": "架空SDKの再試行回数を3回から1回に減らしたら、失敗の発見が早くなった。",
+      "expectedFocalPoints": [
+        { "name": "再試行を1回へ変更", "anyOf": ["3回から1回", "再試行回数を1回"] },
+        { "name": "失敗発見の短縮", "anyOf": ["失敗の発見が早くなった", "失敗を早く発見"] }
+      ],
+      "requiredSupportingTopics": [
+        { "name": "変更前の3回", "anyOf": ["3回から", "変更前は3回"] }
+      ],
+      "forbiddenScopes": [
+        { "name": "SDK導入手順", "patterns": ["SDKのインストール", "SDK導入手順"] },
+        { "name": "再試行理論の網羅", "patterns": ["再試行戦略を網羅", "指数バックオフの完全解説"] }
+      ],
+      "maxHeadingCount": 3,
+      "targetLengthRange": { "min": 300, "max": 1200 }
+    },
+    {
+      "id": "short-002",
+      "category": "very-short-input",
+      "input": "架空UIの保存ボタンを右上からフォーム末尾へ移したら、操作ミスが減った。",
+      "expectedFocalPoints": [
+        { "name": "保存ボタンの移動", "anyOf": ["右上からフォーム末尾へ", "保存ボタンをフォーム末尾"] },
+        { "name": "操作ミス減少", "anyOf": ["操作ミスが減った", "操作ミスを減ら"] }
+      ],
+      "requiredSupportingTopics": [
+        { "name": "変更前の位置", "anyOf": ["右上から", "変更前は右上"] }
+      ],
+      "forbiddenScopes": [
+        { "name": "UI設計原則の網羅", "patterns": ["UI設計原則を網羅", "デザイン原則の一覧"] },
+        { "name": "フォーム実装手順", "patterns": ["フォームを最初から実装", "HTMLフォームの作り方"] }
+      ],
+      "maxHeadingCount": 3,
+      "targetLengthRange": { "min": 300, "max": 1200 }
+    },
+    {
+      "id": "support-001",
+      "category": "supporting-context-needed",
+      "input": "架空のバッチ処理で同じレコードが二重送信された。処理済みIDを保存し、送信前に照合するようにした。",
+      "expectedFocalPoints": [
+        { "name": "二重送信", "anyOf": ["同じレコードが二重送信", "二重送信"] },
+        { "name": "処理済みID照合", "anyOf": ["処理済みIDを保存", "送信前に照合"] }
+      ],
+      "requiredSupportingTopics": [
+        { "name": "冪等性の目的", "anyOf": ["重複を防", "一度だけ送信", "冪等"] }
+      ],
+      "forbiddenScopes": [
+        { "name": "分散システム全般", "patterns": ["分散システム全般", "分散処理の完全ガイド"] },
+        { "name": "メッセージキュー製品紹介", "patterns": ["メッセージキュー製品", "キュー製品を比較"] }
+      ],
+      "maxHeadingCount": 4,
+      "targetLengthRange": { "min": 500, "max": 1800 }
+    },
+    {
+      "id": "support-002",
+      "category": "supporting-context-needed",
+      "input": "架空アプリの一覧更新で画面がちらついた。更新結果を一度別の配列へ作り、完成後に参照を置き換えると解消した。",
+      "expectedFocalPoints": [
+        { "name": "画面のちらつき", "anyOf": ["画面がちらついた", "一覧更新でちらつ"] },
+        { "name": "完成後に参照を置換", "anyOf": ["完成後に参照を置き換える", "参照を置き換え"] }
+      ],
+      "requiredSupportingTopics": [
+        { "name": "途中状態を見せない目的", "anyOf": ["途中状態", "一括で反映", "完成した配列"] }
+      ],
+      "forbiddenScopes": [
+        { "name": "UIフレームワーク比較", "patterns": ["UIフレームワークを比較", "主要フレームワーク一覧"] },
+        { "name": "状態管理全般", "patterns": ["状態管理の完全ガイド", "状態管理手法を網羅"] }
+      ],
+      "maxHeadingCount": 4,
+      "targetLengthRange": { "min": 500, "max": 1800 }
+    },
+    {
+      "id": "rag-risk-001",
+      "category": "rag-broad-match-risk",
+      "input": "架空クラウドサービスのタイムアウトを30秒から90秒へ変更した。対象は月次集計だけで、通常のAPI呼び出しは変更していない。",
+      "expectedFocalPoints": [
+        { "name": "月次集計のみ90秒", "anyOf": ["30秒から90秒", "月次集計だけ"] },
+        { "name": "通常APIは変更なし", "anyOf": ["通常のAPI呼び出しは変更していない", "通常APIは変更なし"] }
+      ],
+      "requiredSupportingTopics": [
+        { "name": "限定的な適用範囲", "anyOf": ["対象は月次集計だけ", "月次集計に限定"] }
+      ],
+      "forbiddenScopes": [
+        { "name": "クラウドサービス全機能", "patterns": ["クラウドサービスの全機能", "サービス全体を解説"] },
+        { "name": "一般的なタイムアウト設定", "patterns": ["一般的なタイムアウト設定", "すべてのAPIのタイムアウト"] }
+      ],
+      "maxHeadingCount": 4,
+      "targetLengthRange": { "min": 400, "max": 1600 }
+    },
+    {
+      "id": "rag-risk-002",
+      "category": "rag-broad-match-risk",
+      "input": "架空の認証画面でログアウト後も表示名だけ残った。認証方式は変えず、画面用キャッシュの削除漏れだけを修正した。",
+      "expectedFocalPoints": [
+        { "name": "表示名の残留", "anyOf": ["ログアウト後も表示名だけ残った", "表示名だけ残"] },
+        { "name": "キャッシュ削除漏れ", "anyOf": ["画面用キャッシュの削除漏れ", "キャッシュ削除漏れ"] }
+      ],
+      "requiredSupportingTopics": [
+        { "name": "認証方式は変更なし", "anyOf": ["認証方式は変えず", "認証方式は変更していない"] }
+      ],
+      "forbiddenScopes": [
+        { "name": "認証方式の全解説", "patterns": ["認証方式をすべて解説", "OAuthとOIDCの導入"] },
+        { "name": "ログイン機能の実装手順", "patterns": ["ログイン機能を最初から", "認証画面の完全な作り方"] }
+      ],
+      "maxHeadingCount": 4,
+      "targetLengthRange": { "min": 400, "max": 1600 }
+    }
+  ]
+}
