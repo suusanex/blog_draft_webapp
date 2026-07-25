@@ -127,9 +127,12 @@
                         <div class="small text-muted mb-1">この見出しで使う情報</div>
                         @foreach (var item in BodyMaterialItems(_editablePlan))
                         {
-                            <div class="form-check form-check-inline">
+                            <div class="form-check mb-1">
+                                <label class="form-check-label">
                                 <input class="form-check-input" type="checkbox" checked="@section.SourceItemIds.Contains(item.Id)" @onchange="e => SetSectionSource(section, item.Id, e.Value is true)" />
-                                <label class="form-check-label">@item.Id</label>
+                                <span>@item.Id: @item.Text</span>
+                                <OriginBadge Item="item" />
+                                </label>
                             </div>
                         }
                         @if (SectionValidationMessage(section) is not null)
@@ -141,9 +144,12 @@
                             <div class="small text-muted mt-2 mb-1">この見出しで扱わない範囲</div>
                             @foreach (var item in _editablePlan.ExcludedScope)
                             {
-                                <div class="form-check form-check-inline">
+                                <div class="form-check mb-1">
+                                    <label class="form-check-label">
                                     <input class="form-check-input" type="checkbox" checked="@section.ExcludedScopeItemIds.Contains(item.Id)" @onchange="e => SetSectionExcluded(section, item.Id, e.Value is true)" />
-                                    <label class="form-check-label">@item.Id</label>
+                                    <span>@item.Id: @item.Text</span>
+                                    <OriginBadge Item="item" />
+                                    </label>
                                 </div>
                             }
                         }

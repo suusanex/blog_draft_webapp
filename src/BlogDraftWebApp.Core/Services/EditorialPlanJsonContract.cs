@@ -100,8 +100,8 @@ public static class EditorialPlanJsonContract
             ["required"] = Required("id", "text", "origin", "sourceExcerpt"),
             ["properties"] = new JsonObject
             {
-                ["id"] = new JsonObject { ["type"] = "string", ["minLength"] = 1 },
-                ["text"] = new JsonObject { ["type"] = "string", ["minLength"] = 1 },
+                ["id"] = new JsonObject { ["type"] = "string" },
+                ["text"] = new JsonObject { ["type"] = "string" },
                 ["origin"] = new JsonObject
                 {
                     ["type"] = "string",
@@ -130,21 +130,18 @@ public static class EditorialPlanJsonContract
             ["required"] = Required("id", "heading", "purpose", "sourceItemIds", "excludedScopeItemIds"),
             ["properties"] = new JsonObject
             {
-                ["id"] = new JsonObject { ["type"] = "string", ["minLength"] = 1 },
-                ["heading"] = new JsonObject { ["type"] = "string", ["minLength"] = 1 },
-                ["purpose"] = new JsonObject { ["type"] = "string", ["minLength"] = 1 },
+                ["id"] = new JsonObject { ["type"] = "string" },
+                ["heading"] = new JsonObject { ["type"] = "string" },
+                ["purpose"] = new JsonObject { ["type"] = "string" },
                 ["sourceItemIds"] = new JsonObject
                 {
                     ["type"] = "array",
-                    ["minItems"] = 1,
-                    ["uniqueItems"] = true,
-                    ["items"] = new JsonObject { ["type"] = "string", ["minLength"] = 1 },
+                    ["items"] = new JsonObject { ["type"] = "string" },
                 },
                 ["excludedScopeItemIds"] = new JsonObject
                 {
                     ["type"] = "array",
-                    ["uniqueItems"] = true,
-                    ["items"] = new JsonObject { ["type"] = "string", ["minLength"] = 1 },
+                    ["items"] = new JsonObject { ["type"] = "string" },
                 },
             },
         };

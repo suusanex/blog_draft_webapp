@@ -72,6 +72,11 @@ public sealed class OpenAiLlmClientTests
         Assert.That(format.GetProperty("type").GetString(), Is.EqualTo("json_schema"));
         Assert.That(format.GetProperty("json_schema").GetProperty("name").GetString(), Is.EqualTo("editorial_plan"));
         Assert.That(format.GetProperty("json_schema").GetProperty("strict").GetBoolean(), Is.True);
+
+        var schema = format.GetProperty("json_schema").GetProperty("schema").GetRawText();
+        Assert.That(schema, Does.Not.Contain("minLength"));
+        Assert.That(schema, Does.Not.Contain("minItems"));
+        Assert.That(schema, Does.Not.Contain("uniqueItems"));
     }
 
     [Test]

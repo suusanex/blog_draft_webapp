@@ -68,6 +68,26 @@ public sealed class GenerateDraftTests
     }
 
     [Test]
+    public void SectionMaterials_ShowIdTextAndOriginForBodyAndExcludedItems()
+    {
+        ConfigureHttpClient((request, _) => Task.FromResult(request.RequestUri!.AbsolutePath.EndsWith("/draft/plan", StringComparison.Ordinal)
+            ? CreateJsonResponse(HttpStatusCode.OK, PlanResponseWithExcludedScope())
+            : new HttpResponseMessage(HttpStatusCode.NotFound)));
+
+        var cut = _context.RenderComponent<GenerateDraft>();
+        cut.Find("textarea").Change("0123456789");
+        cut.FindAll("button").Single(x => x.TextContent.Contains("編集計画を提案")).Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.That(cut.Markup, Does.Contain("focus-1: 重要ポイント"));
+            Assert.That(cut.Markup, Does.Contain("excluded-1: 今回は扱わない範囲"));
+            Assert.That(cut.Markup, Does.Contain("再整理"));
+            Assert.That(cut.Markup, Does.Contain("編集上の推論"));
+        });
+    }
+
+    [Test]
     public void ApprovedPlanFlow_GeneratesDraft()
     {
         ConfigureHttpClient((request, _) =>
@@ -303,6 +323,21 @@ public sealed class GenerateDraftTests
         },
         Model = "stub-model",
     };
+
+    private static EditorialPlanResponse PlanResponseWithExcludedScope()
+    {
+        var response = PlanResponse();
+        response.Plan.ExcludedScope =
+        [
+            new BriefItem
+            {
+                Id = "excluded-1",
+                Text = "今回は扱わない範囲",
+                Origin = BriefItemOrigin.InferredEditorialConstraint,
+            },
+        ];
+        return response;
+    }
 
     private static HttpResponseMessage CreateJsonResponse<T>(HttpStatusCode statusCode, T payload)
     {

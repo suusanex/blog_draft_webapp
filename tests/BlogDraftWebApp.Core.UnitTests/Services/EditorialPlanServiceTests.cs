@@ -118,6 +118,45 @@ public sealed class EditorialPlanServiceTests
         Assert.That(sections.SchemaJson, Does.Not.Contain("focalPoints"));
     }
 
+    [Test]
+    public void JsonContract_ExcludesAzureUnsupportedKeywordsFromAllNestedSchemas()
+    {
+        foreach (var mode in Enum.GetValues<PlanGenerationMode>())
+        {
+            using var document = JsonDocument.Parse(EditorialPlanJsonContract.For(mode).SchemaJson);
+
+            Assert.That(ContainsProperty(document.RootElement, "minLength"), Is.False, mode.ToString());
+            Assert.That(ContainsProperty(document.RootElement, "minItems"), Is.False, mode.ToString());
+            Assert.That(ContainsProperty(document.RootElement, "uniqueItems"), Is.False, mode.ToString());
+        }
+    }
+
+    private static bool ContainsProperty(JsonElement element, string propertyName)
+    {
+        if (element.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var property in element.EnumerateObject())
+            {
+                if (property.NameEquals(propertyName) || ContainsProperty(property.Value, propertyName))
+                {
+                    return true;
+                }
+            }
+        }
+        else if (element.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var child in element.EnumerateArray())
+            {
+                if (ContainsProperty(child, propertyName))
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
     private sealed class FakeLlmClient : ILlmClient
     {
         private readonly string _content;
