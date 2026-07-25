@@ -3,8 +3,11 @@
 @using System.Net
 @using System.Net.Http.Json
 @using System.ComponentModel.DataAnnotations
+@using System.Text.Json
 @using BlogDraftWebApp.Api.Models
+@using BlogDraftWebApp.Core.Exceptions
 @using BlogDraftWebApp.Core.Models
+@using BlogDraftWebApp.Core.Services
 @using Markdig
 @inject IHttpClientFactory HttpClientFactory
 @inject IJSRuntime JS
@@ -14,27 +17,31 @@
 
 <h1>ブログ下書き生成</h1>
 
-<EditForm Model="_model" OnValidSubmit="SubmitAsync">
-    <DataAnnotationsValidator />
+@if (_editablePlan is null && string.IsNullOrWhiteSpace(_draftMarkdown))
+{
+    <EditForm Model="_model" OnValidSubmit="ProposeAsync">
+        <DataAnnotationsValidator />
 
-    <div class="mb-3">
-        <label class="form-label">この記事で伝えたいポイント</label>
-        <div class="form-text mb-2">完全な目次ではなく、今回特に伝えたい観測・判断・躓きなどを入力してください。</div>
-        <InputTextArea class="form-control" Value="@_model.Overview" ValueChanged="OnOverviewChanged" ValueExpression="(() => _model.Overview)" rows="10" />
-        <ValidationMessage For="() => _model.Overview" />
-    </div>
+        <div class="mb-3">
+            <label class="form-label">この記事で伝えたいポイント</label>
+            <div class="form-text mb-2">完全な目次ではなく、今回特に伝えたい観測・判断・躓きなどを入力してください。</div>
+            <InputTextArea class="form-control" Value="@_model.Overview" ValueChanged="OnOverviewChanged" ValueExpression="(() => _model.Overview)" rows="10" />
+            <ValidationMessage For="() => _model.Overview" />
+        </div>
 
-    <div class="form-check mb-3">
-        <InputCheckbox class="form-check-input" @bind-Value="_isPreviewMode" id="previewMode" />
-        <label class="form-check-label" for="previewMode">プレビューモード（LLM 入力内容を表示）</label>
-    </div>
+        <div class="form-check mb-3">
+            <InputCheckbox class="form-check-input" @bind-Value="_isPreviewMode" id="previewMode" />
+            <label class="form-check-label" for="previewMode">提案後にWriter入力プレビューを表示</label>
+        </div>
 
-    <button class="btn btn-primary" type="submit" disabled="@IsGenerateDisabled">@(_isBusy ? "生成中..." : (_isPreviewMode ? "プレビュー" : "下書きを生成"))</button>
-    @if (_isBusy)
-    {
-        <span class="ms-2">生成中...</span>
-    }
-</EditForm>
+        <button class="btn btn-primary" type="submit" disabled="@IsGenerateDisabled">@(_isBusy ? "提案中..." : "編集計画を提案")</button>
+        <button class="btn btn-outline-secondary ms-2" type="button" disabled="@IsGenerateDisabled" @onclick="GenerateLegacyAsync">従来方式で直接生成</button>
+        @if (_isBusy)
+        {
+            <span class="ms-2">処理中...</span>
+        }
+    </EditForm>
+}
 
 @if (!string.IsNullOrWhiteSpace(_warning))
 {
@@ -52,10 +59,117 @@
     </div>
 }
 
+@if (_editablePlan is not null)
+{
+    <section class="mt-4" aria-label="編集計画レビュー">
+        <div class="d-flex align-items-center justify-content-between">
+            <h2>編集計画をレビュー</h2>
+            <span class="badge text-bg-secondary">提案を確認してから生成</span>
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label">中心命題</label>
+            @if (_editablePlan.Thesis is null)
+            {
+                <button class="btn btn-sm btn-outline-secondary" @onclick="AddThesis">追加</button>
+            }
+            else
+            {
+                <div class="input-group">
+                    <InputText class="form-control" Value="@_editablePlan.Thesis.Text" ValueChanged="value => UpdateItemText(_editablePlan.Thesis!, value)" ValueExpression="(() => _editablePlan.Thesis!.Text)" />
+                    <button class="btn btn-outline-danger" type="button" @onclick="RemoveThesis">削除</button>
+                </div>
+                <OriginBadge Item="_editablePlan.Thesis" />
+            }
+        </div>
+
+        <div class="mb-3">
+            <div class="d-flex justify-content-between align-items-center">
+                <label class="form-label mb-0">重要ポイント</label>
+                <button class="btn btn-sm btn-outline-secondary" type="button" @onclick='() => AddItem(_editablePlan.FocalPoints, "重要ポイント")'>追加</button>
+            </div>
+            @foreach (var item in _editablePlan.FocalPoints)
+            {
+                <div class="input-group mt-2">
+                    <InputText class="form-control" Value="@item.Text" ValueChanged="value => UpdateItemText(item, value)" ValueExpression="(() => item.Text)" />
+                    <button class="btn btn-outline-secondary" type="button" @onclick="() => MoveItem(_editablePlan.FocalPoints, item, -1)">↑</button>
+                    <button class="btn btn-outline-secondary" type="button" @onclick="() => MoveItem(_editablePlan.FocalPoints, item, 1)">↓</button>
+                    <button class="btn btn-outline-danger" type="button" @onclick="() => RemoveItem(_editablePlan.FocalPoints, item)">削除</button>
+                </div>
+                <OriginBadge Item="item" />
+            }
+        </div>
+
+        <details class="mb-3">
+            <summary>観測・判断・読者前提・対象外</summary>
+            @RenderAdvancedItems("実際に試したこと・観測", _editablePlan.TriedOrObserved)
+            @RenderAdvancedItems("判断・暫定的な見立て", _editablePlan.Judgements)
+            @RenderAdvancedItems("読者が知っている前提", _editablePlan.ReaderAssumptions)
+            @RenderAdvancedItems("今回扱わない範囲", _editablePlan.ExcludedScope)
+        </details>
+
+        <div class="mb-3">
+            <div class="d-flex justify-content-between align-items-center">
+                <label class="form-label mb-0">見出し案</label>
+                <button class="btn btn-sm btn-outline-secondary" type="button" @onclick="AddSection">追加</button>
+            </div>
+            @foreach (var section in _editablePlan.Sections)
+            {
+                <div class="card mt-2">
+                    <div class="card-body">
+                        <div class="input-group mb-2">
+                            <InputText class="form-control" Value="@section.Heading" ValueChanged="value => section.Heading = value" ValueExpression="(() => section.Heading)" />
+                            <button class="btn btn-outline-secondary" type="button" @onclick="() => MoveSection(section, -1)">↑</button>
+                            <button class="btn btn-outline-secondary" type="button" @onclick="() => MoveSection(section, 1)">↓</button>
+                            <button class="btn btn-outline-danger" type="button" @onclick="() => _editablePlan.Sections.Remove(section)">削除</button>
+                        </div>
+                        <InputTextArea class="form-control mb-2" Value="@section.Purpose" ValueChanged="value => section.Purpose = value" ValueExpression="(() => section.Purpose)" rows="2" />
+                        <div class="small text-muted mb-1">この見出しで使う情報</div>
+                        @foreach (var item in AllBriefItems(_editablePlan))
+                        {
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="checkbox" checked="@section.SourceItemIds.Contains(item.Id)" @onchange="e => SetSectionSource(section, item.Id, e.Value is true)" />
+                                <label class="form-check-label">@item.Id</label>
+                            </div>
+                        }
+                        @if (_editablePlan.ExcludedScope.Count > 0)
+                        {
+                            <div class="small text-muted mt-2 mb-1">この見出しで扱わない範囲</div>
+                            @foreach (var item in _editablePlan.ExcludedScope)
+                            {
+                                <div class="form-check form-check-inline">
+                                    <input class="form-check-input" type="checkbox" checked="@section.ExcludedScopeItemIds.Contains(item.Id)" @onchange="e => SetSectionExcluded(section, item.Id, e.Value is true)" />
+                                    <label class="form-check-label">@item.Id</label>
+                                </div>
+                            }
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+
+        <div class="d-flex flex-wrap gap-2">
+            <button class="btn btn-primary" type="button" disabled="@_isBusy" @onclick="GenerateApprovedAsync">この計画で下書きを生成</button>
+            <button class="btn btn-outline-primary" type="button" disabled="@_isBusy" @onclick="RegenerateSectionsAsync">見出しだけ再提案</button>
+            <button class="btn btn-outline-warning" type="button" disabled="@_isBusy" @onclick="RegenerateFullAsync">計画全体を再提案</button>
+            <button class="btn btn-outline-secondary" type="button" disabled="@_isBusy" @onclick="PreviewApprovedAsync">Writer入力をプレビュー</button>
+        </div>
+
+        <details class="mt-3">
+            <summary>編集計画の詳細プレビュー</summary>
+            <h3 class="h5 mt-3">元の自由入力</h3>
+            <pre class="border p-3" style="white-space: pre-wrap;">@_model.Overview</pre>
+            <h3 class="h5 mt-3">初回提案</h3>
+            <pre class="border p-3" style="white-space: pre-wrap;">@SerializePlan(_proposedPlan)</pre>
+            <h3 class="h5 mt-3">現在の承認対象</h3>
+            <pre class="border p-3" style="white-space: pre-wrap;">@SerializePlan(_editablePlan)</pre>
+        </details>
+    </section>
+}
+
 @if (!string.IsNullOrWhiteSpace(_promptPreview))
 {
     <div class="alert alert-warning mt-3">この内容には機密情報が含まれる可能性があります。画面のスクリーンショットや共有にご注意ください</div>
-
     <div class="mt-4 d-flex gap-2">
         <button class="btn btn-secondary" @onclick="CopyPromptAsync">コピー</button>
         @if (!string.IsNullOrWhiteSpace(_copyPromptMessage))
@@ -63,8 +177,7 @@
             <span class="align-self-center">@_copyPromptMessage</span>
         }
     </div>
-
-    <h2 class="mt-3">LLM 入力内容（プレビュー）</h2>
+    <h2 class="mt-3">Writer入力内容（プレビュー）</h2>
     <pre class="border p-3" style="white-space: pre-wrap;">@_promptPreview</pre>
 }
 
@@ -76,11 +189,10 @@
         {
             <span class="align-self-center">@_copyMessage</span>
         }
+        <button class="btn btn-outline-secondary" @onclick="BackToPlan">編集計画へ戻る</button>
     </div>
-
     <h2 class="mt-3">生成結果（Markdown）</h2>
     <pre class="border p-3" style="white-space: pre-wrap;">@_draftMarkdown</pre>
-
     <h2 class="mt-3">プレビュー</h2>
     <div class="border p-3">@((MarkupString)_draftHtml)</div>
 }
@@ -95,10 +207,12 @@
     }
 
     private readonly MarkdownPipeline _pipeline = new MarkdownPipelineBuilder().UseAdvancedExtensions().DisableHtml().Build();
-
+    private readonly JsonSerializerOptions _jsonOptions = new(JsonSerializerDefaults.Web) { WriteIndented = true };
     private GenerateDraftViewModel _model = new();
     private bool _isBusy;
     private bool _isPreviewMode;
+    private EditorialPlan? _proposedPlan;
+    private EditorialPlan? _editablePlan;
     private string? _draftMarkdown;
     private string _draftHtml = string.Empty;
     private string? _promptPreview;
@@ -115,25 +229,88 @@
         StateHasChanged();
     }
 
-    private Task SubmitAsync() => _isPreviewMode ? PreviewAsync() : GenerateAsync();
-
-    private async Task PreviewAsync()
+    private async Task ProposeAsync()
     {
+        ResetTransientState();
         _isBusy = true;
-        _error = null;
-        _warning = null;
-        _copyMessage = null;
-        _copyPromptMessage = null;
-        _draftMarkdown = null;
-        _draftHtml = string.Empty;
-        _promptPreview = null;
-
         try
         {
-            var http = HttpClientFactory.CreateClient();
-            http.BaseAddress = new Uri(Nav.BaseUri);
+            var response = await GetHttp().PostAsJsonAsync("/draft/plan", new EditorialPlanRequest { Overview = _model.Overview });
+            if (response.StatusCode == HttpStatusCode.OK)
+            {
+                var payload = await response.Content.ReadFromJsonAsync<EditorialPlanResponse>();
+                _proposedPlan = payload?.Plan;
+                _editablePlan = ClonePlan(_proposedPlan);
+                if (_isPreviewMode)
+                {
+                    await PreviewApprovedAsync();
+                }
+                return;
+            }
 
-            var response = await http.PostAsJsonAsync("/draft/preview", new PreviewPromptRequest { Overview = _model.Overview });
+            _error = await ReadErrorAsync(response);
+        }
+        finally
+        {
+            _isBusy = false;
+        }
+    }
+
+    private async Task GenerateApprovedAsync()
+    {
+        if (_editablePlan is null)
+        {
+            return;
+        }
+
+        ResetTransientState();
+        _isBusy = true;
+        try
+        {
+            var response = await GetHttp().PostAsJsonAsync("/draft", new GenerateDraftRequest
+            {
+                Overview = _model.Overview,
+                ApprovedPlan = _editablePlan,
+            });
+            await HandleDraftResponseAsync(response);
+        }
+        finally
+        {
+            _isBusy = false;
+        }
+    }
+
+    private async Task GenerateLegacyAsync()
+    {
+        ResetTransientState();
+        _isBusy = true;
+        try
+        {
+            var response = await GetHttp().PostAsJsonAsync("/draft", new GenerateDraftRequest { Overview = _model.Overview });
+            await HandleDraftResponseAsync(response);
+        }
+        finally
+        {
+            _isBusy = false;
+        }
+    }
+
+    private async Task PreviewApprovedAsync()
+    {
+        if (_editablePlan is null)
+        {
+            return;
+        }
+
+        _isBusy = true;
+        _error = null;
+        try
+        {
+            var response = await GetHttp().PostAsJsonAsync("/draft/preview", new PreviewPromptRequest
+            {
+                Overview = _model.Overview,
+                ApprovedPlan = _editablePlan,
+            });
             if (response.StatusCode == HttpStatusCode.OK)
             {
                 var payload = await response.Content.ReadFromJsonAsync<PreviewPromptResponse>();
@@ -142,13 +319,7 @@
                 return;
             }
 
-            _error = await response.Content.ReadFromJsonAsync<ErrorResponse>();
-            _error ??= new ErrorResponse
-            {
-                ErrorCode = "UNKNOWN",
-                Message = "エラーが発生しました",
-                IsRetryable = false,
-            };
+            _error = await ReadErrorAsync(response);
         }
         finally
         {
@@ -156,9 +327,101 @@
         }
     }
 
-    private async Task GenerateAsync()
+    private async Task RegenerateSectionsAsync()
     {
+        if (_editablePlan is null)
+        {
+            return;
+        }
+
+        ResetTransientState();
         _isBusy = true;
+        try
+        {
+            var response = await GetHttp().PostAsJsonAsync("/draft/plan", new EditorialPlanRequest
+            {
+                Overview = _model.Overview,
+                Mode = PlanGenerationMode.SectionsOnly,
+                CurrentPlan = _editablePlan,
+            });
+            if (response.StatusCode == HttpStatusCode.OK)
+            {
+                var payload = await response.Content.ReadFromJsonAsync<EditorialPlanResponse>();
+                if (payload?.Plan is not null)
+                {
+                    _editablePlan = payload.Plan;
+                }
+
+                return;
+            }
+
+            _error = await ReadErrorAsync(response);
+        }
+        finally
+        {
+            _isBusy = false;
+        }
+    }
+
+    private async Task RegenerateFullAsync()
+    {
+        var confirmed = await JS.InvokeAsync<bool>("confirm", "計画全体を再提案すると、現在の手動修正が置き換わります。続けますか？");
+        if (!confirmed)
+        {
+            return;
+        }
+
+        await ProposeAsync();
+    }
+
+    private async Task HandleDraftResponseAsync(HttpResponseMessage response)
+    {
+        if (response.StatusCode == HttpStatusCode.OK)
+        {
+            var payload = await response.Content.ReadFromJsonAsync<GenerateDraftResponse>();
+            _draftMarkdown = payload?.Draft;
+            _warning = payload?.Warning;
+            if (!string.IsNullOrWhiteSpace(_draftMarkdown))
+            {
+                _draftHtml = Markdig.Markdown.ToHtml(_draftMarkdown, _pipeline);
+            }
+
+            return;
+        }
+
+        _error = await ReadErrorAsync(response);
+    }
+
+    private async Task<ErrorResponse> ReadErrorAsync(HttpResponseMessage response)
+    {
+        try
+        {
+            return await response.Content.ReadFromJsonAsync<ErrorResponse>() ?? UnknownError();
+        }
+        catch (JsonException)
+        {
+            return UnknownError();
+        }
+    }
+
+    private static ErrorResponse UnknownError() => new()
+    {
+        ErrorCode = "UNKNOWN",
+        Message = "エラーが発生しました",
+        IsRetryable = false,
+    };
+
+    private Task RetryAsync() => _editablePlan is null ? GenerateLegacyAsync() : GenerateApprovedAsync();
+
+    private void BackToPlan()
+    {
+        _draftMarkdown = null;
+        _draftHtml = string.Empty;
+        _error = null;
+    }
+
+    private void ResetTransientState()
+    {
         _error = null;
         _warning = null;
         _copyMessage = null;
@@ -166,61 +429,188 @@
         _draftMarkdown = null;
         _draftHtml = string.Empty;
         _promptPreview = null;
-
-        try
-        {
-            var http = HttpClientFactory.CreateClient();
-            http.BaseAddress = new Uri(Nav.BaseUri);
-
-            var response = await http.PostAsJsonAsync("/draft", new GenerateDraftRequest { Overview = _model.Overview });
-            if (response.StatusCode == HttpStatusCode.OK)
-            {
-                var payload = await response.Content.ReadFromJsonAsync<GenerateDraftResponse>();
-                _draftMarkdown = payload?.Draft;
-                _warning = payload?.Warning;
-
-                if (!string.IsNullOrWhiteSpace(_draftMarkdown))
-                {
-                    _draftHtml = Markdig.Markdown.ToHtml(_draftMarkdown, _pipeline);
-                }
-                return;
-            }
-
-            _error = await response.Content.ReadFromJsonAsync<ErrorResponse>();
-            _error ??= new ErrorResponse
-            {
-                ErrorCode = "UNKNOWN",
-                Message = "エラーが発生しました",
-                IsRetryable = false,
-            };
-        }
-        finally
-        {
-            _isBusy = false;
-        }
     }
 
-    private Task RetryAsync() => GenerateAsync();
-
-    private async Task CopyDraftAsync()
+    private HttpClient GetHttp()
     {
-        if (string.IsNullOrWhiteSpace(_draftMarkdown))
+        var http = HttpClientFactory.CreateClient();
+        if (http.BaseAddress is null)
+        {
+            http.BaseAddress = new Uri(Nav.BaseUri);
+        }
+
+        return http;
+    }
+
+    private void AddThesis()
+    {
+        _editablePlan!.Thesis = NewUserItem("中心命題");
+    }
+
+    private void RemoveThesis() => _editablePlan!.Thesis = null;
+
+    private static BriefItem NewUserItem(string text) => new()
+    {
+        Id = $"user-{Guid.NewGuid():N}",
+        Text = text,
+        Origin = BriefItemOrigin.UserEdited,
+    };
+
+    private static void AddItem(List<BriefItem> items, string label) => items.Add(NewUserItem(label));
+
+    private static void RemoveItem(List<BriefItem> items, BriefItem item) => items.Remove(item);
+
+    private static void MoveItem(List<BriefItem> items, BriefItem item, int offset)
+    {
+        var index = items.IndexOf(item);
+        var target = index + offset;
+        if (index < 0 || target < 0 || target >= items.Count)
         {
             return;
         }
 
-        await JS.InvokeVoidAsync("navigator.clipboard.writeText", _draftMarkdown);
-        _copyMessage = "コピーしました";
+        items.RemoveAt(index);
+        items.Insert(target, item);
+    }
+
+    private void UpdateItemText(BriefItem item, string value)
+    {
+        item.Text = value;
+        item.Origin = BriefItemOrigin.UserEdited;
+        item.SourceExcerpt = null;
+    }
+
+    private void AddSection()
+    {
+        _editablePlan!.Sections.Add(new PlannedSection
+        {
+            Id = $"section-{Guid.NewGuid():N}",
+            Heading = "新しい見出し",
+            Purpose = "このセクションで伝える目的",
+        });
+    }
+
+    private void MoveSection(PlannedSection section, int offset)
+    {
+        var sections = _editablePlan!.Sections;
+        var index = sections.IndexOf(section);
+        var target = index + offset;
+        if (index < 0 || target < 0 || target >= sections.Count)
+        {
+            return;
+        }
+
+        sections.RemoveAt(index);
+        sections.Insert(target, section);
+    }
+
+    private static void SetSectionSource(PlannedSection section, string itemId, bool selected)
+    {
+        SetId(section.SourceItemIds, itemId, selected);
+    }
+
+    private static void SetSectionExcluded(PlannedSection section, string itemId, bool selected)
+    {
+        SetId(section.ExcludedScopeItemIds, itemId, selected);
+    }
+
+    private static void SetId(List<string> ids, string id, bool selected)
+    {
+        if (selected && !ids.Contains(id, StringComparer.Ordinal))
+        {
+            ids.Add(id);
+        }
+        else if (!selected)
+        {
+            ids.RemoveAll(x => string.Equals(x, id, StringComparison.Ordinal));
+        }
+    }
+
+    private RenderFragment RenderAdvancedItems(string title, List<BriefItem> items) => builder =>
+    {
+        var sequence = 0;
+        builder.OpenElement(sequence++, "div");
+        builder.AddAttribute(sequence++, "class", "mb-3");
+        builder.OpenElement(sequence++, "div");
+        builder.AddAttribute(sequence++, "class", "d-flex justify-content-between align-items-center");
+        builder.OpenElement(sequence++, "label");
+        builder.AddAttribute(sequence++, "class", "form-label mb-0");
+        builder.AddContent(sequence++, title);
+        builder.CloseElement();
+        builder.OpenElement(sequence++, "button");
+        builder.AddAttribute(sequence++, "class", "btn btn-sm btn-outline-secondary");
+        builder.AddAttribute(sequence++, "type", "button");
+        builder.AddAttribute(sequence++, "onclick", EventCallback.Factory.Create(this, () => AddItem(items, title)));
+        builder.AddContent(sequence++, "追加");
+        builder.CloseElement();
+        builder.CloseElement();
+
+        foreach (var item in items)
+        {
+            builder.OpenElement(sequence++, "div");
+            builder.AddAttribute(sequence++, "class", "input-group mt-2");
+            builder.OpenElement(sequence++, "input");
+            builder.AddAttribute(sequence++, "class", "form-control");
+            builder.AddAttribute(sequence++, "value", item.Text);
+            builder.AddAttribute(sequence++, "onchange", EventCallback.Factory.Create<ChangeEventArgs>(this, e => UpdateItemText(item, e.Value?.ToString() ?? string.Empty)));
+            builder.CloseElement();
+            builder.OpenElement(sequence++, "button");
+            builder.AddAttribute(sequence++, "class", "btn btn-outline-danger");
+            builder.AddAttribute(sequence++, "type", "button");
+            builder.AddAttribute(sequence++, "onclick", EventCallback.Factory.Create(this, () => RemoveItem(items, item)));
+            builder.AddContent(sequence++, "削除");
+            builder.CloseElement();
+            builder.CloseElement();
+            builder.OpenComponent<OriginBadge>(sequence++);
+            builder.AddAttribute(sequence++, "Item", item);
+            builder.CloseComponent();
+        }
+
+        builder.CloseElement();
+    };
+
+    private static IEnumerable<BriefItem> AllBriefItems(EditorialPlan plan)
+    {
+        if (plan.Thesis is not null)
+        {
+            yield return plan.Thesis;
+        }
+
+        foreach (var item in plan.FocalPoints.Concat(plan.TriedOrObserved).Concat(plan.Judgements)
+                     .Concat(plan.ReaderAssumptions))
+        {
+            yield return item;
+        }
+    }
+
+    private string SerializePlan(EditorialPlan? plan) => plan is null ? "(なし)" : JsonSerializer.Serialize(plan, _jsonOptions);
+
+    private static EditorialPlan? ClonePlan(EditorialPlan? plan)
+    {
+        if (plan is null)
+        {
+            return null;
+        }
+
+        var json = JsonSerializer.Serialize(plan);
+        return JsonSerializer.Deserialize<EditorialPlan>(json);
+    }
+
+    private async Task CopyDraftAsync()
+    {
+        if (!string.IsNullOrWhiteSpace(_draftMarkdown))
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", _draftMarkdown);
+            _copyMessage = "コピーしました";
+        }
     }
 
     private async Task CopyPromptAsync()
     {
-        if (string.IsNullOrWhiteSpace(_promptPreview))
+        if (!string.IsNullOrWhiteSpace(_promptPreview))
         {
-            return;
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", _promptPreview);
+            _copyPromptMessage = "コピーしました";
         }
-
-        await JS.InvokeVoidAsync("navigator.clipboard.writeText", _promptPreview);
-        _copyPromptMessage = "コピーしました";
     }
 }

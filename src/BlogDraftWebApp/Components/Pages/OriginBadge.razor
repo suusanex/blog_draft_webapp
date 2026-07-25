@@ -1,0 +1,17 @@
+@using BlogDraftWebApp.Core.Models
+
+<span class="badge text-bg-light ms-1">@Label</span>
+
+@code {
+    [Parameter]
+    public BriefItem Item { get; set; } = new();
+
+    private string Label => Item.Origin switch
+    {
+        BriefItemOrigin.Input => "入力由来",
+        BriefItemOrigin.Reorganized => "再整理",
+        BriefItemOrigin.InferredEditorialConstraint => "編集上の推論",
+        BriefItemOrigin.UserEdited => "ユーザー編集",
+        _ => Item.Origin.ToString(),
+    };
+}

@@ -9,4 +9,6 @@ public sealed class GenerateDraftRequest
     [MinLength(BlogOverview.MinimumLength, ErrorMessage = BlogOverview.MinimumLengthErrorMessage)]
     [MaxLength(BlogOverview.MaximumLength, ErrorMessage = BlogOverview.MaximumLengthErrorMessage)]
     public string Overview { get; set; } = string.Empty;
+
+    public EditorialPlan? ApprovedPlan { get; set; }
 }

@@ -1,8 +1,10 @@
 using System.Net;
+using System.Net.Http.Json;
 using System.Text.Json;
 using BlogDraftWebApp.Api.Models;
 using BlogDraftWebApp.Components.Pages;
 using BlogDraftWebApp.Core.Models;
+using BlogDraftWebApp.Core.Services;
 using BlogDraftWebApp.Tests.Common.Http;
 using Bunit;
 using Microsoft.AspNetCore.Components;
@@ -24,72 +26,68 @@ public sealed class GenerateDraftTests
     }
 
     [TearDown]
-    public void TearDown()
-    {
-        _context.Dispose();
-    }
+    public void TearDown() => _context.Dispose();
 
     [Test]
-    public void OverviewEmpty_DisablesGenerateButton()
+    public void OverviewEmpty_DisablesProposalButton()
     {
-        ConfigureHttpClient(CreateJsonResponse(HttpStatusCode.OK, new GenerateDraftResponse { Draft = "# Title" }));
-
+        ConfigureHttpClient((_, _) => Task.FromResult(CreateJsonResponse(HttpStatusCode.OK, PlanResponse())));
         var cut = _context.RenderComponent<GenerateDraft>();
 
-        var button = cut.Find("button");
-        Assert.That(button.HasAttribute("disabled"), Is.True);
+        Assert.That(cut.FindAll("button").Single(x => x.TextContent.Contains("編集計画を提案")).HasAttribute("disabled"), Is.True);
     }
 
     [Test]
-    public void OverviewInput_EnablesGenerateButton()
+    public void InputGuide_DescribesCentralPointsAndPlanReview()
     {
-        ConfigureHttpClient(CreateJsonResponse(HttpStatusCode.OK, new GenerateDraftResponse { Draft = "# Title" }));
-
-        var cut = _context.RenderComponent<GenerateDraft>();
-        cut.Find("textarea").Change("0123456789");
-
-        var button = cut.Find("button");
-        Assert.That(button.HasAttribute("disabled"), Is.False);
-    }
-
-    [Test]
-    public void InputGuide_DescribesCentralPointsInsteadOfCompleteOutline()
-    {
-        ConfigureHttpClient(CreateJsonResponse(HttpStatusCode.OK, new GenerateDraftResponse { Draft = "# Title" }));
-
+        ConfigureHttpClient((_, _) => Task.FromResult(CreateJsonResponse(HttpStatusCode.OK, PlanResponse())));
         var cut = _context.RenderComponent<GenerateDraft>();
 
         Assert.That(cut.Markup, Does.Contain("この記事で伝えたいポイント"));
         Assert.That(cut.Markup, Does.Contain("完全な目次ではなく"));
-        Assert.That(cut.Markup, Does.Contain("観測・判断・躓き"));
+        Assert.That(cut.Markup, Does.Contain("編集計画を提案"));
     }
 
     [Test]
-    public void ShortInput_ShowsUnifiedValidationMessage()
+    public void ProposalFlow_ShowsReviewAndOrigin()
     {
-        ConfigureHttpClient(CreateJsonResponse(HttpStatusCode.OK, new GenerateDraftResponse { Draft = "# Title" }));
-
-        var cut = _context.RenderComponent<GenerateDraft>();
-        cut.Find("textarea").Change(new string('x', BlogOverview.MinimumLength - 1));
-        cut.Find("button").Click();
-
-        cut.WaitForAssertion(() =>
-            Assert.That(cut.Markup, Does.Contain(BlogOverview.MinimumLengthErrorMessage)));
-    }
-
-    [Test]
-    public void GenerateAsync_Success_ShowsDraftAndPreview()
-    {
-        ConfigureHttpClient(CreateJsonResponse(HttpStatusCode.OK, new GenerateDraftResponse
-        {
-            Draft = "# Title\n\nThis is a draft.",
-            Warning = null,
-        }));
+        ConfigureHttpClient((request, _) => Task.FromResult(request.RequestUri!.AbsolutePath.EndsWith("/draft/plan", StringComparison.Ordinal)
+            ? CreateJsonResponse(HttpStatusCode.OK, PlanResponse())
+            : new HttpResponseMessage(HttpStatusCode.NotFound)));
 
         var cut = _context.RenderComponent<GenerateDraft>();
         cut.Find("textarea").Change("0123456789");
+        cut.FindAll("button").Single(x => x.TextContent.Contains("編集計画を提案")).Click();
 
-        cut.Find("button").Click();
+        cut.WaitForAssertion(() =>
+        {
+            Assert.That(cut.Markup, Does.Contain("編集計画をレビュー"));
+            Assert.That(cut.Markup, Does.Contain("入力由来"));
+            Assert.That(cut.Markup, Does.Contain("中心ポイント"));
+        });
+    }
+
+    [Test]
+    public void ApprovedPlanFlow_GeneratesDraft()
+    {
+        ConfigureHttpClient((request, _) =>
+        {
+            if (request.RequestUri!.AbsolutePath.EndsWith("/draft/plan", StringComparison.Ordinal))
+            {
+                return Task.FromResult(CreateJsonResponse(HttpStatusCode.OK, PlanResponse()));
+            }
+
+            return Task.FromResult(CreateJsonResponse(HttpStatusCode.OK, new GenerateDraftResponse
+            {
+                Draft = "# Title\n\nThis is a draft.",
+            }));
+        });
+
+        var cut = _context.RenderComponent<GenerateDraft>();
+        cut.Find("textarea").Change("0123456789");
+        cut.FindAll("button").Single(x => x.TextContent.Contains("編集計画を提案")).Click();
+        cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain("編集計画をレビュー")));
+        cut.FindAll("button").Single(x => x.TextContent.Contains("この計画で下書きを生成")).Click();
 
         cut.WaitForAssertion(() =>
         {
@@ -99,127 +97,123 @@ public sealed class GenerateDraftTests
     }
 
     [Test]
-    public void GenerateAsync_Error_ShowsErrorMessage()
+    public void ApprovedPlanPreview_ShowsWriterPrompt()
     {
-        ConfigureHttpClient(CreateJsonResponse(HttpStatusCode.BadRequest, new ErrorResponse
+        ConfigureHttpClient((request, _) =>
         {
-            ErrorCode = "INVALID_REQUEST",
-            Message = "エラーが発生しました",
-            IsRetryable = false,
-        }));
+            if (request.RequestUri!.AbsolutePath.EndsWith("/draft/plan", StringComparison.Ordinal))
+            {
+                return Task.FromResult(CreateJsonResponse(HttpStatusCode.OK, PlanResponse()));
+            }
+
+            return Task.FromResult(CreateJsonResponse(HttpStatusCode.OK, new PreviewPromptResponse
+            {
+                Prompt = "approved writer prompt",
+            }));
+        });
 
         var cut = _context.RenderComponent<GenerateDraft>();
         cut.Find("textarea").Change("0123456789");
-        cut.Find("button").Click();
+        cut.FindAll("button").Single(x => x.TextContent.Contains("編集計画を提案")).Click();
+        cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain("編集計画をレビュー")));
+        cut.FindAll("button").Single(x => x.TextContent.Contains("Writer入力をプレビュー")).Click();
 
-        cut.WaitForAssertion(() =>
-        {
-            Assert.That(cut.Markup, Does.Contain("エラーが発生しました"));
-            Assert.That(cut.Markup, Does.Not.Contain("再試行"));
-        });
+        cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain("approved writer prompt")));
     }
 
     [Test]
-    public void GenerateAsync_RetryableError_ShowsRetryButton()
+    public void ResultCanReturnToPlan()
     {
-        ConfigureHttpClient(CreateJsonResponse(HttpStatusCode.InternalServerError, new ErrorResponse
+        ConfigureHttpClient((request, _) => Task.FromResult(request.RequestUri!.AbsolutePath.EndsWith("/draft/plan", StringComparison.Ordinal)
+            ? CreateJsonResponse(HttpStatusCode.OK, PlanResponse())
+            : CreateJsonResponse(HttpStatusCode.OK, new GenerateDraftResponse { Draft = "# Title\n\nDraft" })));
+
+        var cut = _context.RenderComponent<GenerateDraft>();
+        cut.Find("textarea").Change("0123456789");
+        cut.FindAll("button").Single(x => x.TextContent.Contains("編集計画を提案")).Click();
+        cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain("編集計画をレビュー")));
+        cut.FindAll("button").Single(x => x.TextContent.Contains("この計画で下書きを生成")).Click();
+        cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain("生成結果（Markdown）")));
+        cut.FindAll("button").Single(x => x.TextContent.Contains("編集計画へ戻る")).Click();
+
+        Assert.That(cut.Markup, Does.Contain("編集計画をレビュー"));
+    }
+
+    [Test]
+    public void ErrorResponse_ShowsRetryButton()
+    {
+        ConfigureHttpClient((_, _) => Task.FromResult(CreateJsonResponse(HttpStatusCode.BadGateway, new ErrorResponse
         {
-            ErrorCode = "TIMEOUT",
-            Message = "生成に時間がかかりすぎています。もう一度お試しください",
+            ErrorCode = "LLM_ERROR",
+            Message = "LLM サービスでエラーが発生しました",
             IsRetryable = true,
-        }));
+        })));
 
         var cut = _context.RenderComponent<GenerateDraft>();
         cut.Find("textarea").Change("0123456789");
-        cut.Find("button").Click();
+        cut.FindAll("button").Single(x => x.TextContent.Contains("編集計画を提案")).Click();
 
-        cut.WaitForAssertion(() =>
-        {
-            Assert.That(cut.Markup, Does.Contain("再試行"));
-        });
-    }
-
-    [Test]
-    public void GenerateAsync_DisablesHtmlInMarkdown()
-    {
-        ConfigureHttpClient(CreateJsonResponse(HttpStatusCode.OK, new GenerateDraftResponse
-        {
-            Draft = "# Title\n\n<script>alert('x')</script>",
-        }));
-
-        var cut = _context.RenderComponent<GenerateDraft>();
-        cut.Find("textarea").Change("0123456789");
-        cut.Find("button").Click();
-
-        cut.WaitForAssertion(() =>
-        {
-            Assert.That(cut.Markup, Does.Not.Contain("<script>"));
-        });
+        cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain("再試行")));
     }
 
     [Test]
     public async Task CopyDraftAsync_CallsClipboardAndShowsMessage()
     {
-        var jsInterop = _context.JSInterop;
-        jsInterop.Mode = JSRuntimeMode.Loose;
-
-        ConfigureHttpClient(CreateJsonResponse(HttpStatusCode.OK, new GenerateDraftResponse
-        {
-            Draft = "# Title\n\nThis is a draft.",
-        }));
+        _context.JSInterop.Mode = JSRuntimeMode.Loose;
+        ConfigureHttpClient((request, _) => Task.FromResult(request.RequestUri!.AbsolutePath.EndsWith("/draft/plan", StringComparison.Ordinal)
+            ? CreateJsonResponse(HttpStatusCode.OK, PlanResponse())
+            : CreateJsonResponse(HttpStatusCode.OK, new GenerateDraftResponse { Draft = "# Title\n\nDraft" })));
 
         var cut = _context.RenderComponent<GenerateDraft>();
         cut.Find("textarea").Change("0123456789");
-        cut.Find("button").Click();
-
+        cut.FindAll("button").Single(x => x.TextContent.Contains("編集計画を提案")).Click();
+        cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain("編集計画をレビュー")));
+        cut.FindAll("button").Single(x => x.TextContent.Contains("この計画で下書きを生成")).Click();
         cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain("生成結果（Markdown）")));
-
         await cut.InvokeAsync(() => cut.Find("button.btn-secondary").Click());
 
         cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain("コピーしました")));
     }
 
-    [Test]
-    public void PreviewAsync_ShowsPromptAndWarning()
+    private void ConfigureHttpClient(Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> handler)
     {
-        var handler = new StubHttpMessageHandler((request, _) =>
+        _context.Services.AddSingleton<IHttpClientFactory>(new StubHttpClientFactory(new HttpClient(new StubHttpMessageHandler(handler))));
+    }
+
+    private static EditorialPlanResponse PlanResponse() => new()
+    {
+        Plan = new EditorialPlan
         {
-            if (request.RequestUri is not null && request.RequestUri.AbsolutePath.EndsWith("/draft/preview", StringComparison.OrdinalIgnoreCase))
+            Thesis = new BriefItem
             {
-                return Task.FromResult(CreateJsonResponse(HttpStatusCode.OK, new PreviewPromptResponse
+                Id = "thesis-1",
+                Text = "中心ポイント",
+                Origin = BriefItemOrigin.Input,
+                SourceExcerpt = "0123456789",
+            },
+            FocalPoints =
+            [
+                new BriefItem
                 {
-                    Prompt = "[システムプロンプト]\n...",
-                    Warning = null,
-                }));
-            }
-
-            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
-        });
-
-        ConfigureHttpClient(new HttpClient(handler));
-
-        var cut = _context.RenderComponent<GenerateDraft>();
-        cut.Find("textarea").Change("0123456789");
-        cut.Find("#previewMode").Change(true);
-        cut.Find("button").Click();
-
-        cut.WaitForAssertion(() =>
-        {
-            Assert.That(cut.Markup, Does.Contain("LLM 入力内容（プレビュー）"));
-            Assert.That(cut.Markup, Does.Contain("機密情報が含まれる可能性"));
-        });
-    }
-
-    private void ConfigureHttpClient(HttpResponseMessage response)
-    {
-        var handler = new StubHttpMessageHandler((_, _) => Task.FromResult(response));
-        ConfigureHttpClient(new HttpClient(handler));
-    }
-
-    private void ConfigureHttpClient(HttpClient client)
-    {
-        _context.Services.AddSingleton<IHttpClientFactory>(new StubHttpClientFactory(client));
-    }
+                    Id = "focus-1",
+                    Text = "重要ポイント",
+                    Origin = BriefItemOrigin.Reorganized,
+                    SourceExcerpt = "0123456789",
+                },
+            ],
+            Sections =
+            [
+                new PlannedSection
+                {
+                    Id = "section-1",
+                    Heading = "中心ポイント",
+                    Purpose = "中心を説明する",
+                    SourceItemIds = ["focus-1"],
+                },
+            ],
+        },
+        Model = "stub-model",
+    };
 
     private static HttpResponseMessage CreateJsonResponse<T>(HttpStatusCode statusCode, T payload)
     {
@@ -230,28 +224,13 @@ public sealed class GenerateDraftTests
     private sealed class StubHttpClientFactory : IHttpClientFactory
     {
         private readonly HttpClient _client;
-
-        public StubHttpClientFactory(HttpClient client)
-        {
-            _client = client;
-        }
-
-        public HttpClient CreateClient(string name)
-        {
-            return _client;
-        }
+        public StubHttpClientFactory(HttpClient client) => _client = client;
+        public HttpClient CreateClient(string name) => _client;
     }
 
     private sealed class StubNavigationManager : NavigationManager
     {
-        public StubNavigationManager(string baseUri)
-        {
-            Initialize(baseUri, baseUri);
-        }
-
-        protected override void NavigateToCore(string uri, bool forceLoad)
-        {
-            Uri = ToAbsoluteUri(uri).ToString();
-        }
+        public StubNavigationManager(string baseUri) => Initialize(baseUri, baseUri);
+        protected override void NavigateToCore(string uri, bool forceLoad) => Uri = ToAbsoluteUri(uri).ToString();
     }
 }

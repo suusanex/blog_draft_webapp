@@ -31,7 +31,9 @@ public sealed class GenerateDraftPageTests
         await page.FillAsync("textarea", "0123456789");
         await page.Locator("textarea").BlurAsync();
         await page.WaitForFunctionAsync("() => !document.querySelector('button')?.disabled");
-        await page.ClickAsync("button");
+        await page.GetByRole(AriaRole.Button, new() { Name = "編集計画を提案" }).ClickAsync();
+        await page.GetByRole(AriaRole.Button, new() { Name = "この計画で下書きを生成" }).WaitForAsync();
+        await page.GetByRole(AriaRole.Button, new() { Name = "この計画で下書きを生成" }).ClickAsync();
         await page.Locator("text=生成結果（Markdown）").WaitForAsync();
     }
 
@@ -49,11 +51,12 @@ public sealed class GenerateDraftPageTests
 
         await page.GotoAsync($"{BaseUrl}/generate");
         await page.WaitForLoadStateAsync(LoadState.NetworkIdle);
-        await page.CheckAsync("#previewMode");
         await page.FillAsync("textarea", "0123456789");
         await page.Locator("textarea").BlurAsync();
         await page.WaitForFunctionAsync("() => !document.querySelector('button')?.disabled");
-        await page.ClickAsync("button");
-        await page.Locator("text=LLM 入力内容（プレビュー）").WaitForAsync();
+        await page.GetByRole(AriaRole.Button, new() { Name = "編集計画を提案" }).ClickAsync();
+        await page.GetByRole(AriaRole.Button, new() { Name = "Writer入力をプレビュー" }).WaitForAsync();
+        await page.GetByRole(AriaRole.Button, new() { Name = "Writer入力をプレビュー" }).ClickAsync();
+        await page.Locator("text=Writer入力内容（プレビュー）").WaitForAsync();
     }
 }
