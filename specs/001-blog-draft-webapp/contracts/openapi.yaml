@@ -6,6 +6,7 @@ info:
     
     ## 主要機能
     - ブログ記事の概要から Markdown 形式の下書きを生成
+    - 自由入力から編集計画を提案し、承認済み計画で下書きを生成
     - LLM に送信されるプロンプトのプレビュー表示（デバッグ用）
     - RAG（Azure AI Search）による過去記事からのコンテキスト補強
     
@@ -22,6 +23,35 @@ servers:
     description: Production server
 
 paths:
+  /draft/plan:
+    post:
+      summary: 編集計画と見出し案を提案
+      description: |
+        単一の自由入力から、中心命題、入力由来の項目、編集上の推論、見出し案をJSONで提案する。
+        LLMへのRAG検索は行わず、入力にない技術的事実を追加しない。
+        mode が sectionsOnly の場合は currentPlan の項目を保持し、見出しだけを再提案する。
+      operationId: proposeEditorialPlan
+      tags:
+        - Draft Generation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EditorialPlanRequest'
+      responses:
+        '200':
+          description: 編集計画の提案成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorialPlanResponse'
+        '400':
+          description: リクエストまたは現在の計画のバリデーションエラー
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /draft:
     post:
       summary: ブログ下書きを生成
@@ -276,6 +306,112 @@ components:
             
             # 目的
             長時間実行される処理を Durable Functions で実装する方法を解説
+        approvedPlan:
+          allOf:
+            - $ref: '#/components/schemas/EditorialPlan'
+          nullable: true
+          description: 承認済み編集計画。省略時は従来のoverview一段生成を使用する。
+
+    EditorialPlanRequest:
+      type: object
+      required:
+        - overview
+      properties:
+        overview:
+          type: string
+          minLength: 10
+          maxLength: 5000
+        mode:
+          type: string
+          enum: [full, sectionsOnly]
+          default: full
+          description: full は計画全体、sectionsOnly は currentPlan のブリーフを保持した見出し再提案。sectionsOnly では currentPlan が必須。
+        currentPlan:
+          allOf:
+            - $ref: '#/components/schemas/EditorialPlan'
+          nullable: true
+
+    EditorialPlanResponse:
+      type: object
+      required: [plan, model, generatedAt]
+      properties:
+        plan:
+          $ref: '#/components/schemas/EditorialPlan'
+        model:
+          type: string
+        generatedAt:
+          type: string
+          format: date-time
+
+    EditorialPlan:
+      type: object
+      required: [focalPoints, triedOrObserved, judgements, readerAssumptions, excludedScope, sections]
+      properties:
+        thesis:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/BriefItem'
+        focalPoints:
+          type: array
+          items:
+            $ref: '#/components/schemas/BriefItem'
+        triedOrObserved:
+          type: array
+          items:
+            $ref: '#/components/schemas/BriefItem'
+        judgements:
+          type: array
+          items:
+            $ref: '#/components/schemas/BriefItem'
+        readerAssumptions:
+          type: array
+          items:
+            $ref: '#/components/schemas/BriefItem'
+        excludedScope:
+          type: array
+          items:
+            $ref: '#/components/schemas/BriefItem'
+        sections:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlannedSection'
+
+    BriefItem:
+      type: object
+      required: [id, text, origin, sourceExcerpt]
+      properties:
+        id:
+          type: string
+        text:
+          type: string
+        origin:
+          type: string
+          enum: [Input, Reorganized, InferredEditorialConstraint, UserEdited]
+        sourceExcerpt:
+          type: string
+          nullable: true
+
+    PlannedSection:
+      type: object
+      required: [id, heading, purpose, sourceItemIds, excludedScopeItemIds]
+      properties:
+        id:
+          type: string
+        heading:
+          type: string
+        purpose:
+          type: string
+        sourceItemIds:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            type: string
+        excludedScopeItemIds:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
 
     GenerateDraftResponse:
       type: object
@@ -330,6 +466,11 @@ components:
           example: |
             # タイトル案
             Azure Functions で Durable Functions を使った非同期処理
+        approvedPlan:
+          allOf:
+            - $ref: '#/components/schemas/EditorialPlan'
+          nullable: true
+          description: 承認済み編集計画を指定すると、その計画に基づくWriter入力をプレビューする。
 
     PreviewPromptResponse:
       type: object
@@ -384,7 +525,9 @@ components:
             - CONFIG_ERROR
             - LLM_TIMEOUT
             - LLM_ERROR
+            - LLM_INVALID_RESPONSE
             - RAG_ERROR
+            - INTERNAL_ERROR
           description: エラーコード。
           example: INVALID_REQUEST
         message:

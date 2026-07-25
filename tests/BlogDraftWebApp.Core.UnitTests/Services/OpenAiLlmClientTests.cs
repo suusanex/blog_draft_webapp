@@ -1,4 +1,5 @@
 using System.Net;
+using System.Text.Json;
 using BlogDraftWebApp.Core.Configuration;
 using BlogDraftWebApp.Core.Exceptions;
 using BlogDraftWebApp.Core.Models;
@@ -38,6 +39,44 @@ public sealed class OpenAiLlmClientTests
         Assert.That(draft.Content, Is.EqualTo("# hello"));
         Assert.That(draft.Model, Is.EqualTo("gpt-test"));
         Assert.That(draft.TokensUsed, Is.EqualTo(123));
+    }
+
+    [Test]
+    public async Task GenerateAsync_StructuredOutput設定時_ResponseFormatを送信する()
+    {
+        string? requestBody = null;
+        var handler = new StubHttpMessageHandler(async (request, _) =>
+        {
+            requestBody = await request.Content!.ReadAsStringAsync();
+            const string json = "{\"choices\":[{\"message\":{\"content\":\"{}\"}}]}";
+            return StubHttpMessageHandler.Json(HttpStatusCode.OK, json);
+        });
+        var options = Options.Create(new LlmOptions
+        {
+            ApiKey = "sk-test",
+            BaseUrl = "https://api.openai.com/v1",
+            Model = "gpt-test",
+            StructuredOutputsEnabled = true,
+        });
+        var client = new OpenAiLlmClient(new HttpClient(handler), NullLogger<OpenAiLlmClient>.Instance, options);
+
+        await client.GenerateAsync(new Prompt
+        {
+            SystemMessage = "sys",
+            UserOverview = "user",
+            StructuredOutput = EditorialPlanJsonContract.For(PlanGenerationMode.Full),
+        }, CancellationToken.None);
+
+        using var body = JsonDocument.Parse(requestBody!);
+        var format = body.RootElement.GetProperty("response_format");
+        Assert.That(format.GetProperty("type").GetString(), Is.EqualTo("json_schema"));
+        Assert.That(format.GetProperty("json_schema").GetProperty("name").GetString(), Is.EqualTo("editorial_plan"));
+        Assert.That(format.GetProperty("json_schema").GetProperty("strict").GetBoolean(), Is.True);
+
+        var schema = format.GetProperty("json_schema").GetProperty("schema").GetRawText();
+        Assert.That(schema, Does.Not.Contain("minLength"));
+        Assert.That(schema, Does.Not.Contain("minItems"));
+        Assert.That(schema, Does.Not.Contain("uniqueItems"));
     }
 
     [Test]

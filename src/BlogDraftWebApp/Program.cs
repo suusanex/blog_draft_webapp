@@ -54,6 +54,7 @@ builder.Services.AddSingleton<IConfigurationValidator, ConfigurationValidator>()
 builder.Services.AddSingleton<IAzureSearchClientFactory, DefaultAzureSearchClientFactory>();
 builder.Services.AddScoped<IRetrievalService, AzureAISearchService>();
 builder.Services.AddScoped<IPromptComposer, PromptComposer>();
+builder.Services.AddScoped<IEditorialPlanService, EditorialPlanService>();
 // E2E では実LLMを呼ばずにスタブを使うため、設定で切り替える。
 var useStubLlm = builder.Configuration.GetValue<bool>("E2E:StubLlm");
     if (useStubLlm)

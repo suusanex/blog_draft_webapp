@@ -5,6 +5,7 @@ public sealed class Prompt
     public string SystemMessage { get; init; } = string.Empty;
     public string RagContext { get; init; } = string.Empty;
     public string UserOverview { get; init; } = string.Empty;
+    public StructuredOutputDefinition? StructuredOutput { get; init; }
 
     public string FullPrompt
     {
@@ -29,4 +30,11 @@ public sealed class Prompt
             return string.Join("\n\n", parts);
         }
     }
+}
+
+public sealed class StructuredOutputDefinition
+{
+    public string Name { get; init; } = string.Empty;
+    public string SchemaJson { get; init; } = "{}";
+    public bool Strict { get; init; } = true;
 }

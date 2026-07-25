@@ -26,6 +26,33 @@ public sealed class PromptComposer : IPromptComposer
         return Task.FromResult(prompt);
     }
 
+    public Task<Prompt> ComposeApprovedAsync(
+        BlogOverview overview,
+        EditorialPlan plan,
+        IReadOnlyList<RAGChunk> ragChunks,
+        StyleCard styleCard,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(overview);
+        ArgumentNullException.ThrowIfNull(plan);
+        ArgumentNullException.ThrowIfNull(styleCard);
+
+        overview.Validate();
+        plan = EditorialPlanValidator.NormalizeAndValidate(plan, overview.Content);
+
+        var system = BuildSystemMessage(styleCard) + Environment.NewLine + Environment.NewLine +
+            "[承認済み編集計画ポリシー]" + Environment.NewLine +
+            "承認済み編集計画は、記事に含めてよい情報の上限です。計画にない事実、見出し、手順、比較、一般論を追加しないでください。" + Environment.NewLine +
+            "各セクションは指定された項目と入力断片だけを使い、対象外の範囲は説明しないでください。";
+
+        return Task.FromResult(new Prompt
+        {
+            SystemMessage = system.Trim(),
+            RagContext = BuildRagSection(ragChunks),
+            UserOverview = BuildApprovedUserMessage(plan),
+        });
+    }
+
     private static string BuildUserMessage(BlogOverview overview)
     {
         var sb = new StringBuilder();
@@ -59,6 +86,95 @@ public sealed class PromptComposer : IPromptComposer
         sb.AppendLine();
         sb.AppendLine("記事として完全に見せるためだけの情報は追加しないでください。情報が不足している場合も、短く終えるのではなく、中心ポイントの理解に必要な最小限だけを補ってください。");
         return sb.ToString().Trim();
+    }
+
+    private static string BuildApprovedUserMessage(EditorialPlan plan)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("## 承認済み編集計画");
+        sb.AppendLine();
+
+        AppendItem(sb, "中心命題", plan.Thesis);
+        AppendItems(sb, "重要ポイント", plan.FocalPoints);
+        AppendItems(sb, "実際に試したこと・観測", plan.TriedOrObserved);
+        AppendItems(sb, "判断・暫定的な見立て", plan.Judgements);
+        AppendItems(sb, "読者が知っている前提", plan.ReaderAssumptions);
+        AppendItems(sb, "今回扱わない範囲", plan.ExcludedScope);
+
+        sb.AppendLine("## 承認済み見出し案");
+        sb.AppendLine();
+        foreach (var section in plan.Sections)
+        {
+            sb.AppendLine($"### {section.Heading}");
+            sb.AppendLine($"目的: {section.Purpose}");
+            sb.AppendLine($"使用する項目ID: {string.Join(", ", section.SourceItemIds)}");
+            sb.AppendLine($"扱わない対象外ID: {string.Join(", ", section.ExcludedScopeItemIds)}");
+            sb.AppendLine();
+        }
+
+        sb.AppendLine("## 承認済み入力断片");
+        sb.AppendLine();
+        foreach (var item in AllItems(plan).Where(x => !string.IsNullOrWhiteSpace(x.SourceExcerpt)))
+        {
+            sb.AppendLine($"- [{item.Id}] {item.SourceExcerpt}");
+        }
+
+        sb.AppendLine();
+        sb.AppendLine("## 執筆タスク");
+        sb.AppendLine();
+        sb.AppendLine("承認済み編集計画に含まれる情報だけでMarkdown下書きを作成してください。");
+        sb.AppendLine("情報が少ない場合は短い記事として終了し、完全な解説記事にするための補完を行わないでください。");
+        return sb.ToString().Trim();
+    }
+
+    private static void AppendItem(StringBuilder sb, string heading, BriefItem? item)
+    {
+        sb.AppendLine($"### {heading}");
+        sb.AppendLine();
+        if (item is null)
+        {
+            sb.AppendLine("(なし)");
+        }
+        else
+        {
+            sb.AppendLine($"- [{item.Id}] {item.Text}");
+        }
+
+        sb.AppendLine();
+    }
+
+    private static void AppendItems(StringBuilder sb, string heading, IEnumerable<BriefItem> items)
+    {
+        sb.AppendLine($"### {heading}");
+        sb.AppendLine();
+        var materialized = items.ToList();
+        if (materialized.Count == 0)
+        {
+            sb.AppendLine("(なし)");
+        }
+        else
+        {
+            foreach (var item in materialized)
+            {
+                sb.AppendLine($"- [{item.Id}] {item.Text} (由来: {item.Origin})");
+            }
+        }
+
+        sb.AppendLine();
+    }
+
+    private static IEnumerable<BriefItem> AllItems(EditorialPlan plan)
+    {
+        if (plan.Thesis is not null)
+        {
+            yield return plan.Thesis;
+        }
+
+        foreach (var item in plan.FocalPoints.Concat(plan.TriedOrObserved).Concat(plan.Judgements)
+                     .Concat(plan.ReaderAssumptions).Concat(plan.ExcludedScope))
+        {
+            yield return item;
+        }
     }
 
     private static string BuildSystemMessage(StyleCard styleCard)

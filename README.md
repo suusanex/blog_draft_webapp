@@ -4,15 +4,17 @@ WinUI 3 デスクトップアプリで提供していた「ブログ下書き生
 
 ## できること
 
-- 記事で特に伝えたい観測・判断・躓きなどを入力して Markdown の下書きを生成（RAG + 文体カード + LLM）
-- 「プレビューモード」で LLM に送るプロンプト全文を表示（LLM は呼び出しません）
+- 記事で特に伝えたい観測・判断・躓きなどを単一入力し、LLM が作った編集計画をレビューしてから Markdown の下書きを生成（RAG + 文体カード + LLM）
+- 編集計画では中心命題、重要ポイント、観測、判断、読者前提、対象外、見出し案を確認・修正できる
+- Writer に実際に送る承認済み編集計画のプロンプトをプレビュー表示（LLM は呼び出しません）
+- 既存APIの `overview` だけの `POST /draft` は従来どおり一段生成として利用可能
 - `/health` で稼働確認（設定検証はしません）
 
 ## 技術スタック
 
 - C# / .NET 10
 - Blazor Web App（Interactive Server）
-- ASP.NET Core Minimal API（/draft, /draft/preview, /health）
+- ASP.NET Core Minimal API（/draft/plan, /draft, /draft/preview, /health）
 
 ## クイックスタート（ローカル）
 
@@ -25,6 +27,14 @@ cd src/BlogDraftWebApp
 dotnet build
 dotnet run
 ```
+
+## 編集計画を使った生成
+
+1. `/generate` で、記事で特に伝えたいポイントを1つの自由入力欄へ記入する。
+2. 「編集計画を提案」を押し、中心命題、重要ポイント、観測、判断、読者前提、対象外、見出し案を確認・修正する。
+3. 「この計画で下書きを生成」を押す。必要ならWriter入力をプレビューし、生成後に編集計画へ戻って再生成できる。
+
+見出しだけを作り直す場合は「見出しだけ再提案」を使う。計画全体の再提案は現在の手動修正を置き換えるため、確認ダイアログが表示される。API利用時は `POST /draft/plan` で計画を作り、`approvedPlan` を付けて `POST /draft` または `POST /draft/preview` を呼び出す。
 
 ## 設定（管理者向け）
 
@@ -42,12 +52,17 @@ dotnet run
 
 `StyleCard:SystemPrompt` は任意です。指定した場合は文体カードとともに LLM へ渡します。
 
+編集計画のPlannerは、既定でChat CompletionsのStructured Outputs（strict JSON Schema）を使用します。
+Structured Outputsに対応しないOpenAI互換APIを使う場合だけ、`OpenAI:StructuredOutputsEnabled=false`を明示してください。
+その場合も完全なJSON契約と検証、1回の修復再試行は有効です。
+
 環境変数で設定する場合は `:` を `__` に置き換えます。
 
 例:
 
 - `OpenAI__ApiKey`
 - `OpenAI__Model`
+- `OpenAI__StructuredOutputsEnabled`
 - `StyleCard__Content`
 - `StyleCard__FilePath`
 
@@ -78,7 +93,7 @@ RAG を無効化する場合:
 ## テスト
 
 ```powershell
-dotnet test -c Release
+dotnet test BlogDraftWebApp.sln -c Release
 ```
 
 ## 生成品質の固定評価

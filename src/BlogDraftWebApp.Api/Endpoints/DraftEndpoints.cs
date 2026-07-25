@@ -15,6 +15,47 @@ public static class DraftEndpoints
 {
     public static IEndpointRouteBuilder MapDraftEndpoints(this IEndpointRouteBuilder app)
     {
+        app.MapPost("/draft/plan", async (
+            EditorialPlanRequest request,
+            IEditorialPlanService editorialPlanService,
+            IHostEnvironment env,
+            HttpContext httpContext,
+            CancellationToken cancellationToken) =>
+        {
+            var validationError = ValidateOverview(request?.Overview, env, httpContext);
+            if (validationError is not null)
+            {
+                return validationError;
+            }
+
+            if (request!.Mode == PlanGenerationMode.SectionsOnly)
+            {
+                if (request.CurrentPlan is null)
+                {
+                    return InvalidPlanError("SectionsOnlyにはcurrentPlanが必要です", env, httpContext);
+                }
+
+                var currentPlanError = ValidateBriefPlan(request.CurrentPlan, request.Overview, env, httpContext);
+                if (currentPlanError is not null)
+                {
+                    return currentPlanError;
+                }
+            }
+
+            var result = await editorialPlanService.ProposeAsync(
+                request.Overview,
+                request.Mode,
+                request.CurrentPlan,
+                cancellationToken);
+
+            return Results.Ok(new EditorialPlanResponse
+            {
+                Plan = result.Plan,
+                Model = result.Model,
+                GeneratedAt = result.GeneratedAt,
+            });
+        });
+
         app.MapPost("/draft/preview", async (
             PreviewPromptRequest request,
             IRetrievalService retrievalService,
@@ -30,8 +71,21 @@ public static class DraftEndpoints
                 return validationError;
             }
 
-            var retrieval = await retrievalService.RetrieveAsync(request!.Overview, cancellationToken);
-            var prompt = await promptComposer.ComposeAsync(new BlogOverview(request.Overview), retrieval.Chunks, styleCard, cancellationToken);
+            var planError = ValidateApprovedPlan(request?.ApprovedPlan, request!.Overview, env, httpContext);
+            if (planError is not null)
+            {
+                return planError;
+            }
+
+            if (request!.ApprovedPlan is not null)
+            {
+                request.ApprovedPlan = EditorialPlanValidator.NormalizeAndValidate(request.ApprovedPlan, request.Overview);
+            }
+
+            var retrieval = await retrievalService.RetrieveAsync(request.Overview, cancellationToken);
+            var prompt = request.ApprovedPlan is null
+                ? await promptComposer.ComposeAsync(new BlogOverview(request.Overview), retrieval.Chunks, styleCard, cancellationToken)
+                : await promptComposer.ComposeApprovedAsync(new BlogOverview(request.Overview), request.ApprovedPlan, retrieval.Chunks, styleCard, cancellationToken);
 
             return Results.Ok(new PreviewPromptResponse
             {
@@ -57,8 +111,21 @@ public static class DraftEndpoints
                 return validationError;
             }
 
-            var retrieval = await retrievalService.RetrieveAsync(request!.Overview, cancellationToken);
-            var prompt = await promptComposer.ComposeAsync(new BlogOverview(request.Overview), retrieval.Chunks, styleCard, cancellationToken);
+            var planError = ValidateApprovedPlan(request?.ApprovedPlan, request!.Overview, env, httpContext);
+            if (planError is not null)
+            {
+                return planError;
+            }
+
+            if (request!.ApprovedPlan is not null)
+            {
+                request.ApprovedPlan = EditorialPlanValidator.NormalizeAndValidate(request.ApprovedPlan, request.Overview);
+            }
+
+            var retrieval = await retrievalService.RetrieveAsync(request.Overview, cancellationToken);
+            var prompt = request.ApprovedPlan is null
+                ? await promptComposer.ComposeAsync(new BlogOverview(request.Overview), retrieval.Chunks, styleCard, cancellationToken)
+                : await promptComposer.ComposeApprovedAsync(new BlogOverview(request.Overview), request.ApprovedPlan, retrieval.Chunks, styleCard, cancellationToken);
             var draft = await llmClient.GenerateAsync(prompt, cancellationToken);
 
             var warning = retrieval.Warning;
@@ -119,5 +186,63 @@ public static class DraftEndpoints
         }
 
         return null;
+    }
+
+    private static IResult? ValidateApprovedPlan(
+        EditorialPlan? plan,
+        string overview,
+        IHostEnvironment env,
+        HttpContext httpContext)
+    {
+        if (plan is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            _ = EditorialPlanValidator.NormalizeAndValidate(plan, overview);
+            return null;
+        }
+        catch (EditorialPlanValidationException ex)
+        {
+            return Results.BadRequest(new ErrorResponse
+            {
+                ErrorCode = "INVALID_REQUEST",
+                Message = "編集計画が不正です",
+                Details = env.IsDevelopment() ? ex.Message : null,
+                RequestId = httpContext.TraceIdentifier,
+                IsRetryable = false,
+            });
+        }
+    }
+
+    private static IResult? ValidateBriefPlan(
+        EditorialPlan? plan,
+        string overview,
+        IHostEnvironment env,
+        HttpContext httpContext)
+    {
+        try
+        {
+            _ = EditorialPlanValidator.NormalizeAndValidateBrief(plan, overview);
+            return null;
+        }
+        catch (EditorialPlanValidationException ex)
+        {
+            return InvalidPlanError(ex.Message, env, httpContext);
+        }
+    }
+
+    private static IResult InvalidPlanError(string details, IHostEnvironment env, HttpContext httpContext)
+    {
+        return Results.BadRequest(new ErrorResponse
+        {
+            ErrorCode = "INVALID_REQUEST",
+            Message = "編集計画が不正です",
+            Details = env.IsDevelopment() ? details : null,
+            RequestId = httpContext.TraceIdentifier,
+            IsRetryable = false,
+        });
     }
 }
