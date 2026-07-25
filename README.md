@@ -52,12 +52,17 @@ dotnet run
 
 `StyleCard:SystemPrompt` は任意です。指定した場合は文体カードとともに LLM へ渡します。
 
+編集計画のPlannerは、既定でChat CompletionsのStructured Outputs（strict JSON Schema）を使用します。
+Structured Outputsに対応しないOpenAI互換APIを使う場合だけ、`OpenAI:StructuredOutputsEnabled=false`を明示してください。
+その場合も完全なJSON契約と検証、1回の修復再試行は有効です。
+
 環境変数で設定する場合は `:` を `__` に置き換えます。
 
 例:
 
 - `OpenAI__ApiKey`
 - `OpenAI__Model`
+- `OpenAI__StructuredOutputsEnabled`
 - `StyleCard__Content`
 - `StyleCard__FilePath`
 
@@ -88,7 +93,7 @@ RAG を無効化する場合:
 ## テスト
 
 ```powershell
-dotnet test -c Release
+dotnet test BlogDraftWebApp.sln -c Release
 ```
 
 ## 生成品質の固定評価

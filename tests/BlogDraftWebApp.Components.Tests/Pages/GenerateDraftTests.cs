@@ -157,6 +157,95 @@ public sealed class GenerateDraftTests
     }
 
     [Test]
+    public void ProposalRetry_RepeatsPlanProposalInsteadOfLegacyGeneration()
+    {
+        var planCalls = 0;
+        var draftCalls = 0;
+        ConfigureHttpClient((request, _) =>
+        {
+            if (request.RequestUri!.AbsolutePath.EndsWith("/draft/plan", StringComparison.Ordinal))
+            {
+                planCalls++;
+                return Task.FromResult(planCalls == 1
+                    ? CreateJsonResponse(HttpStatusCode.BadGateway, new ErrorResponse { ErrorCode = "LLM_ERROR", Message = "retry", IsRetryable = true })
+                    : CreateJsonResponse(HttpStatusCode.OK, PlanResponse()));
+            }
+
+            draftCalls++;
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
+        });
+
+        var cut = _context.RenderComponent<GenerateDraft>();
+        cut.Find("textarea").Change("0123456789");
+        cut.FindAll("button").Single(x => x.TextContent.Contains("編集計画を提案")).Click();
+        cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain("再試行")));
+        cut.FindAll("button").Single(x => x.TextContent.Contains("再試行")).Click();
+
+        cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain("編集計画をレビュー")));
+        Assert.That(planCalls, Is.EqualTo(2));
+        Assert.That(draftCalls, Is.EqualTo(0));
+    }
+
+    [Test]
+    public void PreviewRetry_RepeatsPreviewWithoutGeneratingDraft()
+    {
+        var previewCalls = 0;
+        var draftCalls = 0;
+        ConfigureHttpClient((request, _) =>
+        {
+            if (request.RequestUri!.AbsolutePath.EndsWith("/draft/plan", StringComparison.Ordinal))
+            {
+                return Task.FromResult(CreateJsonResponse(HttpStatusCode.OK, PlanResponse()));
+            }
+
+            if (request.RequestUri.AbsolutePath.EndsWith("/draft/preview", StringComparison.Ordinal))
+            {
+                previewCalls++;
+                return Task.FromResult(previewCalls == 1
+                    ? CreateJsonResponse(HttpStatusCode.BadGateway, new ErrorResponse { ErrorCode = "LLM_ERROR", Message = "retry", IsRetryable = true })
+                    : CreateJsonResponse(HttpStatusCode.OK, new PreviewPromptResponse { Prompt = "writer prompt" }));
+            }
+
+            draftCalls++;
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
+        });
+
+        var cut = _context.RenderComponent<GenerateDraft>();
+        cut.Find("textarea").Change("0123456789");
+        cut.FindAll("button").Single(x => x.TextContent.Contains("編集計画を提案")).Click();
+        cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain("編集計画をレビュー")));
+        cut.FindAll("button").Single(x => x.TextContent.Contains("Writer入力をプレビュー")).Click();
+        cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain("再試行")));
+        cut.FindAll("button").Single(x => x.TextContent.Contains("再試行")).Click();
+
+        cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain("writer prompt")));
+        Assert.That(previewCalls, Is.EqualTo(2));
+        Assert.That(draftCalls, Is.EqualTo(0));
+    }
+
+    [Test]
+    public void DeletingMaterial_ClearsSectionReferenceAndShowsValidation()
+    {
+        ConfigureHttpClient((request, _) => Task.FromResult(request.RequestUri!.AbsolutePath.EndsWith("/draft/plan", StringComparison.Ordinal)
+            ? CreateJsonResponse(HttpStatusCode.OK, PlanResponse())
+            : new HttpResponseMessage(HttpStatusCode.NotFound)));
+
+        var cut = _context.RenderComponent<GenerateDraft>();
+        cut.Find("textarea").Change("0123456789");
+        cut.FindAll("button").Single(x => x.TextContent.Contains("編集計画を提案")).Click();
+        cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain("編集計画をレビュー")));
+        Assert.That(cut.FindAll("input[type='checkbox']"), Has.Count.EqualTo(2));
+
+        cut.FindAll("button.btn-outline-danger")[1].Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.That(cut.FindAll("input[type='checkbox']"), Has.Count.EqualTo(1));
+            Assert.That(cut.Markup, Does.Contain("本文材料を1件以上選択してください"));
+        });
+    }
+
+    [Test]
     public async Task CopyDraftAsync_CallsClipboardAndShowsMessage()
     {
         _context.JSInterop.Mode = JSRuntimeMode.Loose;

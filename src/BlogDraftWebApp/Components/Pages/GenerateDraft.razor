@@ -125,12 +125,16 @@
                         </div>
                         <InputTextArea class="form-control mb-2" Value="@section.Purpose" ValueChanged="value => section.Purpose = value" ValueExpression="(() => section.Purpose)" rows="2" />
                         <div class="small text-muted mb-1">この見出しで使う情報</div>
-                        @foreach (var item in AllBriefItems(_editablePlan))
+                        @foreach (var item in BodyMaterialItems(_editablePlan))
                         {
                             <div class="form-check form-check-inline">
                                 <input class="form-check-input" type="checkbox" checked="@section.SourceItemIds.Contains(item.Id)" @onchange="e => SetSectionSource(section, item.Id, e.Value is true)" />
                                 <label class="form-check-label">@item.Id</label>
                             </div>
+                        }
+                        @if (SectionValidationMessage(section) is not null)
+                        {
+                            <div class="text-danger small mt-2">@SectionValidationMessage(section)</div>
                         }
                         @if (_editablePlan.ExcludedScope.Count > 0)
                         {
@@ -149,10 +153,14 @@
         </div>
 
         <div class="d-flex flex-wrap gap-2">
-            <button class="btn btn-primary" type="button" disabled="@_isBusy" @onclick="GenerateApprovedAsync">この計画で下書きを生成</button>
-            <button class="btn btn-outline-primary" type="button" disabled="@_isBusy" @onclick="RegenerateSectionsAsync">見出しだけ再提案</button>
+            <button class="btn btn-primary" type="button" disabled="@IsPlanActionDisabled" @onclick="GenerateApprovedAsync">この計画で下書きを生成</button>
+            <button class="btn btn-outline-primary" type="button" disabled="@IsSectionsProposalDisabled" @onclick="RegenerateSectionsAsync">見出しだけ再提案</button>
             <button class="btn btn-outline-warning" type="button" disabled="@_isBusy" @onclick="RegenerateFullAsync">計画全体を再提案</button>
-            <button class="btn btn-outline-secondary" type="button" disabled="@_isBusy" @onclick="PreviewApprovedAsync">Writer入力をプレビュー</button>
+            <button class="btn btn-outline-secondary" type="button" disabled="@IsPlanActionDisabled" @onclick="PreviewApprovedAsync">Writer入力をプレビュー</button>
+            @if (PlanValidationMessage() is not null)
+            {
+                <div class="text-danger w-100">@PlanValidationMessage()</div>
+            }
         </div>
 
         <details class="mt-3">
@@ -220,8 +228,11 @@
     private string? _copyMessage;
     private string? _copyPromptMessage;
     private ErrorResponse? _error;
+    private LastOperation _lastOperation;
 
     private bool IsGenerateDisabled => _isBusy || string.IsNullOrWhiteSpace(_model.Overview);
+    private bool IsPlanActionDisabled => _isBusy || PlanValidationMessage() is not null;
+    private bool IsSectionsProposalDisabled => _isBusy || BriefValidationMessage() is not null;
 
     private void OnOverviewChanged(string value)
     {
@@ -232,13 +243,20 @@
     private async Task ProposeAsync()
     {
         ResetTransientState();
+        _lastOperation = LastOperation.ProposeFull;
         _isBusy = true;
         try
         {
             var response = await GetHttp().PostAsJsonAsync("/draft/plan", new EditorialPlanRequest { Overview = _model.Overview });
             if (response.StatusCode == HttpStatusCode.OK)
             {
-                var payload = await response.Content.ReadFromJsonAsync<EditorialPlanResponse>();
+                var payload = await ReadJsonAsync<EditorialPlanResponse>(response);
+                if (payload?.Plan is null)
+                {
+                    SetInvalidResponseError();
+                    return;
+                }
+
                 _proposedPlan = payload?.Plan;
                 _editablePlan = ClonePlan(_proposedPlan);
                 if (_isPreviewMode)
@@ -264,6 +282,7 @@
         }
 
         ResetTransientState();
+        _lastOperation = LastOperation.GenerateApproved;
         _isBusy = true;
         try
         {
@@ -283,6 +302,7 @@
     private async Task GenerateLegacyAsync()
     {
         ResetTransientState();
+        _lastOperation = LastOperation.GenerateLegacy;
         _isBusy = true;
         try
         {
@@ -302,8 +322,11 @@
             return;
         }
 
+        _lastOperation = LastOperation.PreviewApproved;
         _isBusy = true;
         _error = null;
+        _promptPreview = null;
+        _warning = null;
         try
         {
             var response = await GetHttp().PostAsJsonAsync("/draft/preview", new PreviewPromptRequest
@@ -313,9 +336,16 @@
             });
             if (response.StatusCode == HttpStatusCode.OK)
             {
-                var payload = await response.Content.ReadFromJsonAsync<PreviewPromptResponse>();
-                _promptPreview = payload?.Prompt;
+                var payload = await ReadJsonAsync<PreviewPromptResponse>(response);
+                if (string.IsNullOrWhiteSpace(payload?.Prompt))
+                {
+                    SetInvalidResponseError();
+                    return;
+                }
+
+                _promptPreview = payload.Prompt;
                 _warning = payload?.Warning;
+                _lastOperation = LastOperation.None;
                 return;
             }
 
@@ -335,6 +365,7 @@
         }
 
         ResetTransientState();
+        _lastOperation = LastOperation.ProposeSections;
         _isBusy = true;
         try
         {
@@ -346,10 +377,15 @@
             });
             if (response.StatusCode == HttpStatusCode.OK)
             {
-                var payload = await response.Content.ReadFromJsonAsync<EditorialPlanResponse>();
+                var payload = await ReadJsonAsync<EditorialPlanResponse>(response);
                 if (payload?.Plan is not null)
                 {
                     _editablePlan = payload.Plan;
+                    _lastOperation = LastOperation.None;
+                }
+                else
+                {
+                    SetInvalidResponseError();
                 }
 
                 return;
@@ -378,18 +414,35 @@
     {
         if (response.StatusCode == HttpStatusCode.OK)
         {
-            var payload = await response.Content.ReadFromJsonAsync<GenerateDraftResponse>();
-            _draftMarkdown = payload?.Draft;
-            _warning = payload?.Warning;
-            if (!string.IsNullOrWhiteSpace(_draftMarkdown))
+            var payload = await ReadJsonAsync<GenerateDraftResponse>(response);
+            if (string.IsNullOrWhiteSpace(payload?.Draft))
             {
-                _draftHtml = Markdig.Markdown.ToHtml(_draftMarkdown, _pipeline);
+                SetInvalidResponseError();
+                return;
             }
+
+            _draftMarkdown = payload.Draft;
+            _warning = payload?.Warning;
+            _draftHtml = Markdig.Markdown.ToHtml(_draftMarkdown, _pipeline);
+            _lastOperation = LastOperation.None;
 
             return;
         }
 
         _error = await ReadErrorAsync(response);
+    }
+
+    private async Task<T?> ReadJsonAsync<T>(HttpResponseMessage response)
+    {
+        try
+        {
+            return await response.Content.ReadFromJsonAsync<T>();
+        }
+        catch (JsonException)
+        {
+            SetInvalidResponseError();
+            return default;
+        }
     }
 
     private async Task<ErrorResponse> ReadErrorAsync(HttpResponseMessage response)
@@ -404,6 +457,16 @@
         }
     }
 
+    private void SetInvalidResponseError()
+    {
+        _error = new ErrorResponse
+        {
+            ErrorCode = "INVALID_RESPONSE",
+            Message = "サーバーから有効な応答を取得できませんでした。もう一度お試しください",
+            IsRetryable = true,
+        };
+    }
+
     private static ErrorResponse UnknownError() => new()
     {
         ErrorCode = "UNKNOWN",
@@ -411,7 +474,15 @@
         IsRetryable = false,
     };
 
-    private Task RetryAsync() => _editablePlan is null ? GenerateLegacyAsync() : GenerateApprovedAsync();
+    private Task RetryAsync() => _lastOperation switch
+    {
+        LastOperation.ProposeFull => ProposeAsync(),
+        LastOperation.ProposeSections => RegenerateSectionsAsync(),
+        LastOperation.PreviewApproved => PreviewApprovedAsync(),
+        LastOperation.GenerateApproved => GenerateApprovedAsync(),
+        LastOperation.GenerateLegacy => GenerateLegacyAsync(),
+        _ => Task.CompletedTask,
+    };
 
     private void BackToPlan()
     {
@@ -447,7 +518,14 @@
         _editablePlan!.Thesis = NewUserItem("中心命題");
     }
 
-    private void RemoveThesis() => _editablePlan!.Thesis = null;
+    private void RemoveThesis()
+    {
+        if (_editablePlan?.Thesis is not null)
+        {
+            RemoveItemReferences(_editablePlan.Thesis.Id);
+            _editablePlan.Thesis = null;
+        }
+    }
 
     private static BriefItem NewUserItem(string text) => new()
     {
@@ -458,7 +536,25 @@
 
     private static void AddItem(List<BriefItem> items, string label) => items.Add(NewUserItem(label));
 
-    private static void RemoveItem(List<BriefItem> items, BriefItem item) => items.Remove(item);
+    private void RemoveItem(List<BriefItem> items, BriefItem item)
+    {
+        RemoveItemReferences(item.Id);
+        items.Remove(item);
+    }
+
+    private void RemoveItemReferences(string itemId)
+    {
+        if (_editablePlan is null)
+        {
+            return;
+        }
+
+        foreach (var section in _editablePlan.Sections)
+        {
+            section.SourceItemIds.RemoveAll(id => string.Equals(id, itemId, StringComparison.Ordinal));
+            section.ExcludedScopeItemIds.RemoveAll(id => string.Equals(id, itemId, StringComparison.Ordinal));
+        }
+    }
 
     private static void MoveItem(List<BriefItem> items, BriefItem item, int offset)
     {
@@ -487,6 +583,7 @@
             Id = $"section-{Guid.NewGuid():N}",
             Heading = "新しい見出し",
             Purpose = "このセクションで伝える目的",
+            SourceItemIds = BodyMaterialItems(_editablePlan).Take(1).Select(item => item.Id).ToList(),
         });
     }
 
@@ -569,7 +666,7 @@
         builder.CloseElement();
     };
 
-    private static IEnumerable<BriefItem> AllBriefItems(EditorialPlan plan)
+    private static IEnumerable<BriefItem> BodyMaterialItems(EditorialPlan plan)
     {
         if (plan.Thesis is not null)
         {
@@ -577,10 +674,56 @@
         }
 
         foreach (var item in plan.FocalPoints.Concat(plan.TriedOrObserved).Concat(plan.Judgements)
-                     .Concat(plan.ReaderAssumptions))
+                     )
         {
             yield return item;
         }
+    }
+
+    private string? PlanValidationMessage()
+    {
+        if (_editablePlan is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            EditorialPlanValidator.Validate(_editablePlan, _model.Overview);
+            return null;
+        }
+        catch (EditorialPlanValidationException ex)
+        {
+            return ex.Message;
+        }
+    }
+
+    private string? BriefValidationMessage()
+    {
+        if (_editablePlan is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            EditorialPlanValidator.NormalizeAndValidateBrief(_editablePlan, _model.Overview);
+            return null;
+        }
+        catch (EditorialPlanValidationException ex)
+        {
+            return ex.Message;
+        }
+    }
+
+    private string? SectionValidationMessage(PlannedSection section)
+    {
+        if (section.SourceItemIds.Count > 0)
+        {
+            return null;
+        }
+
+        return "本文材料を1件以上選択してください";
     }
 
     private string SerializePlan(EditorialPlan? plan) => plan is null ? "(なし)" : JsonSerializer.Serialize(plan, _jsonOptions);
@@ -612,5 +755,15 @@
             await JS.InvokeVoidAsync("navigator.clipboard.writeText", _promptPreview);
             _copyPromptMessage = "コピーしました";
         }
+    }
+
+    private enum LastOperation
+    {
+        None,
+        ProposeFull,
+        ProposeSections,
+        PreviewApproved,
+        GenerateApproved,
+        GenerateLegacy,
     }
 }

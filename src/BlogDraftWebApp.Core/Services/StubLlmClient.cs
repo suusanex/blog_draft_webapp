@@ -14,6 +14,31 @@ public sealed class StubLlmClient : ILlmClient
 
         if (prompt.UserOverview.Contains("[EDITORIAL_PLAN_JSON]", StringComparison.Ordinal))
         {
+            if (prompt.StructuredOutput?.Name == "editorial_sections")
+            {
+                var sections = System.Text.Json.JsonSerializer.Serialize(new
+                {
+                    sections = new[]
+                    {
+                        new PlannedSection
+                        {
+                            Id = "section-1",
+                            Heading = "入力の中心ポイント",
+                            Purpose = "入力内容を伝える",
+                            SourceItemIds = ["focus-1"],
+                        },
+                    },
+                });
+
+                return Task.FromResult(new Draft
+                {
+                    Content = sections,
+                    Model = "stub-llm",
+                    GeneratedAt = DateTimeOffset.UtcNow,
+                    TokensUsed = 0,
+                });
+            }
+
             var input = ExtractInput(prompt.UserOverview);
             var excerpt = input.Length > 80 ? input[..80] : input;
             var plan = System.Text.Json.JsonSerializer.Serialize(new EditorialPlan

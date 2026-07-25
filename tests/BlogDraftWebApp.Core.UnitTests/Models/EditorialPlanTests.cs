@@ -42,6 +42,52 @@ public sealed class EditorialPlanTests
     }
 
     [Test]
+    public void Validate_RejectsSectionWithoutBodyMaterial()
+    {
+        var plan = ValidPlan();
+        plan.Sections[0].SourceItemIds.Clear();
+
+        var ex = Assert.Throws<EditorialPlanValidationException>(() => EditorialPlanValidator.Validate(plan, "0123456789"));
+
+        Assert.That(ex!.Message, Does.Contain("本文材料"));
+    }
+
+    [Test]
+    public void Validate_RejectsReaderAssumptionAsBodyMaterial()
+    {
+        var plan = ValidPlan();
+        plan.Sections[0].SourceItemIds = ["assumption-1"];
+
+        var ex = Assert.Throws<EditorialPlanValidationException>(() => EditorialPlanValidator.Validate(plan, "0123456789"));
+
+        Assert.That(ex!.Message, Does.Contain("本文材料"));
+    }
+
+    [Test]
+    public void Validate_RejectsNullItemEntry()
+    {
+        var plan = ValidPlan();
+        plan.FocalPoints = [null!];
+
+        var ex = Assert.Throws<EditorialPlanValidationException>(() => EditorialPlanValidator.Validate(plan, "0123456789"));
+
+        Assert.That(ex!.Message, Does.Contain("null要素"));
+    }
+
+    [Test]
+    public void NormalizeAndValidate_TrimsReferenceIdsForWriterUse()
+    {
+        var plan = ValidPlan();
+        plan.FocalPoints[0].Id = " focus-1 ";
+        plan.Sections[0].SourceItemIds = [" focus-1 "];
+
+        var normalized = EditorialPlanValidator.NormalizeAndValidate(plan, "0123456789");
+
+        Assert.That(normalized.FocalPoints[0].Id, Is.EqualTo("focus-1"));
+        Assert.That(normalized.Sections[0].SourceItemIds, Is.EqualTo(new[] { "focus-1" }));
+    }
+
+    [Test]
     public async Task ComposeApprovedAsync_DoesNotIncludeOriginalOverview()
     {
         var plan = ValidPlan();
@@ -55,6 +101,7 @@ public sealed class EditorialPlanTests
         Assert.That(prompt.UserOverview, Does.Contain("承認済み編集計画"));
         Assert.That(prompt.UserOverview, Does.Contain("0123456789"));
         Assert.That(prompt.UserOverview, Does.Not.Contain("deleted material"));
+        Assert.That(prompt.StructuredOutput, Is.Null);
     }
 
     private static EditorialPlan ValidPlan() => new()

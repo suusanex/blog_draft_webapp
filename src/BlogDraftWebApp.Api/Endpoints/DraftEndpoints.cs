@@ -30,7 +30,12 @@ public static class DraftEndpoints
 
             if (request!.Mode == PlanGenerationMode.SectionsOnly)
             {
-                var currentPlanError = ValidateApprovedPlan(request.CurrentPlan, request.Overview, env, httpContext);
+                if (request.CurrentPlan is null)
+                {
+                    return InvalidPlanError("SectionsOnlyにはcurrentPlanが必要です", env, httpContext);
+                }
+
+                var currentPlanError = ValidateBriefPlan(request.CurrentPlan, request.Overview, env, httpContext);
                 if (currentPlanError is not null)
                 {
                     return currentPlanError;
@@ -72,6 +77,11 @@ public static class DraftEndpoints
                 return planError;
             }
 
+            if (request!.ApprovedPlan is not null)
+            {
+                request.ApprovedPlan = EditorialPlanValidator.NormalizeAndValidate(request.ApprovedPlan, request.Overview);
+            }
+
             var retrieval = await retrievalService.RetrieveAsync(request.Overview, cancellationToken);
             var prompt = request.ApprovedPlan is null
                 ? await promptComposer.ComposeAsync(new BlogOverview(request.Overview), retrieval.Chunks, styleCard, cancellationToken)
@@ -105,6 +115,11 @@ public static class DraftEndpoints
             if (planError is not null)
             {
                 return planError;
+            }
+
+            if (request!.ApprovedPlan is not null)
+            {
+                request.ApprovedPlan = EditorialPlanValidator.NormalizeAndValidate(request.ApprovedPlan, request.Overview);
             }
 
             var retrieval = await retrievalService.RetrieveAsync(request.Overview, cancellationToken);
@@ -186,7 +201,7 @@ public static class DraftEndpoints
 
         try
         {
-            EditorialPlanValidator.Validate(plan, overview);
+            _ = EditorialPlanValidator.NormalizeAndValidate(plan, overview);
             return null;
         }
         catch (EditorialPlanValidationException ex)
@@ -200,5 +215,34 @@ public static class DraftEndpoints
                 IsRetryable = false,
             });
         }
+    }
+
+    private static IResult? ValidateBriefPlan(
+        EditorialPlan? plan,
+        string overview,
+        IHostEnvironment env,
+        HttpContext httpContext)
+    {
+        try
+        {
+            _ = EditorialPlanValidator.NormalizeAndValidateBrief(plan, overview);
+            return null;
+        }
+        catch (EditorialPlanValidationException ex)
+        {
+            return InvalidPlanError(ex.Message, env, httpContext);
+        }
+    }
+
+    private static IResult InvalidPlanError(string details, IHostEnvironment env, HttpContext httpContext)
+    {
+        return Results.BadRequest(new ErrorResponse
+        {
+            ErrorCode = "INVALID_REQUEST",
+            Message = "編集計画が不正です",
+            Details = env.IsDevelopment() ? details : null,
+            RequestId = httpContext.TraceIdentifier,
+            IsRetryable = false,
+        });
     }
 }

@@ -14,7 +14,8 @@ public static class EditorialPlanPromptComposer
     public static Prompt Compose(
         string overview,
         PlanGenerationMode mode,
-        EditorialPlan? currentPlan)
+        EditorialPlan? currentPlan,
+        string? repairReason = null)
     {
         var system = """
             あなたはブログ記事の編集計画を作るPlannerです。
@@ -35,14 +36,22 @@ public static class EditorialPlanPromptComposer
         user.AppendLine("</free_input>");
         user.AppendLine();
         user.AppendLine("## 必須JSON形状");
-        user.AppendLine("thesis, focalPoints, triedOrObserved, judgements, readerAssumptions, excludedScope, sections");
+        user.AppendLine(EditorialPlanJsonContract.Describe(mode));
 
         if (mode == PlanGenerationMode.SectionsOnly)
         {
             user.AppendLine();
-            user.AppendLine("## 現在の編集計画");
-            user.AppendLine("次の計画の項目を一字一句変更せず保持し、sectionsだけを再提案してください。既存項目を参照するsourceItemIdsを使ってください。");
-            user.AppendLine(JsonSerializer.Serialize(currentPlan, JsonOptions));
+            user.AppendLine("## 現在のブリーフ項目");
+            user.AppendLine("次のブリーフ項目を変更せず保持し、sectionsだけを再提案してください。既存項目を参照するsourceItemIdsを使ってください。");
+            user.AppendLine(JsonSerializer.Serialize(new
+            {
+                thesis = currentPlan?.Thesis,
+                focalPoints = currentPlan?.FocalPoints,
+                triedOrObserved = currentPlan?.TriedOrObserved,
+                judgements = currentPlan?.Judgements,
+                readerAssumptions = currentPlan?.ReaderAssumptions,
+                excludedScope = currentPlan?.ExcludedScope,
+            }, JsonOptions));
         }
         else
         {
@@ -50,10 +59,19 @@ public static class EditorialPlanPromptComposer
             user.AppendLine("自由入力を中心命題、重要ポイント、観測、判断、読者前提、対象外、見出し案へ整理してください。");
         }
 
+        if (!string.IsNullOrWhiteSpace(repairReason))
+        {
+            user.AppendLine();
+            user.AppendLine("## 前回応答の検証結果");
+            user.AppendLine("前回応答は次の検証理由で採用できませんでした。入力本文や前回応答を再掲せず、同じ入力から契約に適合する応答を作り直してください。");
+            user.AppendLine(repairReason);
+        }
+
         return new Prompt
         {
             SystemMessage = system.Trim(),
             UserOverview = user.ToString().Trim(),
+            StructuredOutput = EditorialPlanJsonContract.For(mode),
         };
     }
 }

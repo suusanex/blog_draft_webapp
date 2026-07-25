@@ -35,6 +35,90 @@ public sealed class DraftEndpointsTests
     }
 
     [Test]
+    public async Task EditorialPlan_SectionsOnlyWithoutCurrentPlan_ReturnsBadRequestWithoutLlmCall()
+    {
+        await using var factory = new TestWebApplicationFactory();
+        using var http = factory.CreateClient();
+
+        var response = await http.PostAsJsonAsync("/draft/plan", new EditorialPlanRequest
+        {
+            Overview = "0123456789",
+            Mode = PlanGenerationMode.SectionsOnly,
+        });
+
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
+        factory.LlmClientMock.Verify(x => x.GenerateAsync(It.IsAny<Prompt>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Test]
+    public async Task EditorialPlan_SectionsOnly_AllowsTransientlyUngroundedCurrentSections()
+    {
+        await using var factory = new TestWebApplicationFactory();
+        var overview = "0123456789";
+        var current = CreatePlan(overview);
+        current.Sections[0].SourceItemIds.Clear();
+        factory.LlmClientMock
+            .Setup(x => x.GenerateAsync(It.IsAny<Prompt>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Draft
+            {
+                Content = System.Text.Json.JsonSerializer.Serialize(new
+                {
+                    sections = new[]
+                    {
+                        new PlannedSection
+                        {
+                            Id = "section-1",
+                            Heading = "中心",
+                            Purpose = "中心を伝える",
+                            SourceItemIds = new List<string> { "focus-1" },
+                        },
+                    },
+                }),
+                Model = "planner-model",
+            });
+
+        using var http = factory.CreateClient();
+        var response = await http.PostAsJsonAsync("/draft/plan", new EditorialPlanRequest
+        {
+            Overview = overview,
+            Mode = PlanGenerationMode.SectionsOnly,
+            CurrentPlan = current,
+        });
+
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+    }
+
+    [Test]
+    public async Task EditorialPlan_InvalidLlmResponse_RetriesOnceAndReturns502()
+    {
+        await using var factory = new TestWebApplicationFactory();
+        factory.LlmClientMock
+            .Setup(x => x.GenerateAsync(It.IsAny<Prompt>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Draft { Content = "not json", Model = "planner-model" });
+
+        using var http = factory.CreateClient();
+        var response = await http.PostAsJsonAsync("/draft/plan", new EditorialPlanRequest { Overview = "0123456789" });
+
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadGateway));
+        var payload = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+        Assert.That(payload!.ErrorCode, Is.EqualTo("LLM_INVALID_RESPONSE"));
+        Assert.That(payload.IsRetryable, Is.True);
+        factory.LlmClientMock.Verify(x => x.GenerateAsync(It.IsAny<Prompt>(), It.IsAny<CancellationToken>()), Times.Exactly(2));
+    }
+
+    [Test]
+    public void PlanGenerationMode_SerializesCanonicalCamelCase()
+    {
+        var json = System.Text.Json.JsonSerializer.Serialize(new EditorialPlanRequest
+        {
+            Overview = "0123456789",
+            Mode = PlanGenerationMode.SectionsOnly,
+        }, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web));
+
+        Assert.That(json, Does.Contain("\"mode\":\"sectionsOnly\""));
+    }
+
+    [Test]
     public async Task ApprovedPlan_DraftPromptExcludesDeletedOverviewMaterial()
     {
         await using var factory = new TestWebApplicationFactory();

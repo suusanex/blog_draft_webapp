@@ -38,7 +38,7 @@ public sealed class PromptComposer : IPromptComposer
         ArgumentNullException.ThrowIfNull(styleCard);
 
         overview.Validate();
-        EditorialPlanValidator.Validate(plan, overview.Content);
+        plan = EditorialPlanValidator.NormalizeAndValidate(plan, overview.Content);
 
         var system = BuildSystemMessage(styleCard) + Environment.NewLine + Environment.NewLine +
             "[承認済み編集計画ポリシー]" + Environment.NewLine +

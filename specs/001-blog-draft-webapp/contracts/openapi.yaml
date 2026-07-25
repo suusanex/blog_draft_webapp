@@ -325,6 +325,7 @@ components:
           type: string
           enum: [full, sectionsOnly]
           default: full
+          description: full は計画全体、sectionsOnly は currentPlan のブリーフを保持した見出し再提案。sectionsOnly では currentPlan が必須。
         currentPlan:
           allOf:
             - $ref: '#/components/schemas/EditorialPlan'
@@ -344,6 +345,7 @@ components:
 
     EditorialPlan:
       type: object
+      required: [focalPoints, triedOrObserved, judgements, readerAssumptions, excludedScope, sections]
       properties:
         thesis:
           nullable: true
@@ -376,7 +378,7 @@ components:
 
     BriefItem:
       type: object
-      required: [id, text, origin]
+      required: [id, text, origin, sourceExcerpt]
       properties:
         id:
           type: string
@@ -391,7 +393,7 @@ components:
 
     PlannedSection:
       type: object
-      required: [id, heading, purpose]
+      required: [id, heading, purpose, sourceItemIds, excludedScopeItemIds]
       properties:
         id:
           type: string
@@ -401,10 +403,13 @@ components:
           type: string
         sourceItemIds:
           type: array
+          minItems: 1
+          uniqueItems: true
           items:
             type: string
         excludedScopeItemIds:
           type: array
+          uniqueItems: true
           items:
             type: string
 
@@ -520,7 +525,9 @@ components:
             - CONFIG_ERROR
             - LLM_TIMEOUT
             - LLM_ERROR
+            - LLM_INVALID_RESPONSE
             - RAG_ERROR
+            - INTERNAL_ERROR
           description: エラーコード。
           example: INVALID_REQUEST
         message:

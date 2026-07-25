@@ -54,6 +54,21 @@ public sealed class OpenAiLlmClient : ILlmClient
                 body[key] = value;
             }
 
+            if (_options.StructuredOutputsEnabled && prompt.StructuredOutput is not null)
+            {
+                using var schemaDocument = JsonDocument.Parse(prompt.StructuredOutput.SchemaJson);
+                body["response_format"] = new Dictionary<string, object?>
+                {
+                    ["type"] = "json_schema",
+                    ["json_schema"] = new Dictionary<string, object?>
+                    {
+                        ["name"] = prompt.StructuredOutput.Name,
+                        ["strict"] = prompt.StructuredOutput.Strict,
+                        ["schema"] = schemaDocument.RootElement.Clone(),
+                    },
+                };
+            }
+
             request.Content = JsonContent.Create(body);
 
             using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cts.Token);
