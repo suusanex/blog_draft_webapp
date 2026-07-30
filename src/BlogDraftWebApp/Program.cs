@@ -66,18 +66,18 @@ builder.Services.AddScoped<IPromptComposer, PromptComposer>();
 builder.Services.AddScoped<IEditorialPlanService, EditorialPlanService>();
 // E2E では実LLMを呼ばずにスタブを使うため、設定で切り替える。
 var useStubLlm = builder.Configuration.GetValue<bool>("E2E:StubLlm");
-    if (useStubLlm)
+if (useStubLlm)
+{
+    builder.Services.AddScoped<ILlmClient, StubLlmClient>();
+}
+else
+{
+    builder.Services.AddHttpClient<OpenAiLlmClient>(client =>
     {
-        builder.Services.AddScoped<ILlmClient, StubLlmClient>();
-    }
-    else
-    {
-        builder.Services.AddHttpClient<OpenAiLlmClient>(client =>
-        {
-            client.Timeout = TimeSpan.FromSeconds(600);
-        });
-        builder.Services.AddScoped<ILlmClient>(sp => sp.GetRequiredService<OpenAiLlmClient>());
-    }
+        client.Timeout = TimeSpan.FromSeconds(600);
+    });
+    builder.Services.AddScoped<ILlmClient>(sp => sp.GetRequiredService<OpenAiLlmClient>());
+}
 
 builder.Services.AddSingleton<IValidateOptions<LlmOptions>, LlmOptionsValidator>();
 builder.Services.AddSingleton<IValidateOptions<RagOptions>, RagOptionsValidator>();

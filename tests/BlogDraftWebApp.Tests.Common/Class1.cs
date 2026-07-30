@@ -1,4 +1,4 @@
-﻿namespace BlogDraftWebApp.Tests.Common;
+namespace BlogDraftWebApp.Tests.Common;
 
 public class Class1
 {

@@ -53,7 +53,7 @@ public sealed class EvaluationEngineTests
 
     private sealed class FailingLlmClient : ILlmClient
     {
-        public Task<Draft> GenerateAsync(Prompt prompt, CancellationToken cancellationToken) =>
+        public Task<Draft> GenerateAsync(Prompt prompt, CancellationToken cancellationToken, int? maxOutputTokens = null) =>
             throw new InvalidOperationException("sensitive upstream details");
     }
 }

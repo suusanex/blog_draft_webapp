@@ -1,4 +1,4 @@
-﻿namespace BlogDraftWebApp.Api;
+namespace BlogDraftWebApp.Api;
 
 public class Class1
 {

@@ -236,7 +236,7 @@ public sealed class EvaluationEngine
 
     private sealed class DeterministicEvaluationStubLlmClient : ILlmClient
     {
-        public Task<Draft> GenerateAsync(Prompt prompt, CancellationToken cancellationToken)
+        public Task<Draft> GenerateAsync(Prompt prompt, CancellationToken cancellationToken, int? maxOutputTokens = null)
         {
             cancellationToken.ThrowIfCancellationRequested();
             var ragNote = string.IsNullOrWhiteSpace(prompt.RagContext)

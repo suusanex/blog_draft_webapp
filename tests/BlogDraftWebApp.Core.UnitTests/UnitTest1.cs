@@ -1,4 +1,4 @@
-﻿namespace BlogDraftWebApp.Core.UnitTests;
+namespace BlogDraftWebApp.Core.UnitTests;
 
 public class Tests
 {

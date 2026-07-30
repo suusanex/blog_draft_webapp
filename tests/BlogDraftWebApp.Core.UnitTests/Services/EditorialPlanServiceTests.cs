@@ -162,7 +162,7 @@ public sealed class EditorialPlanServiceTests
         private readonly string _content;
         public FakeLlmClient(string content) => _content = content;
 
-        public Task<Draft> GenerateAsync(Prompt prompt, CancellationToken cancellationToken) =>
+        public Task<Draft> GenerateAsync(Prompt prompt, CancellationToken cancellationToken, int? maxOutputTokens = null) =>
             Task.FromResult(new Draft { Content = _content, Model = "test-model" });
     }
 
@@ -173,7 +173,7 @@ public sealed class EditorialPlanServiceTests
 
         public SequenceLlmClient(params string[] responses) => _responses = new Queue<string>(responses);
 
-        public Task<Draft> GenerateAsync(Prompt prompt, CancellationToken cancellationToken)
+        public Task<Draft> GenerateAsync(Prompt prompt, CancellationToken cancellationToken, int? maxOutputTokens = null)
         {
             Prompts.Add(prompt);
             var content = _responses.Count == 0 ? "not json" : _responses.Dequeue();

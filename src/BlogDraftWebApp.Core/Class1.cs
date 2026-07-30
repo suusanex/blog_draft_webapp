@@ -1,4 +1,4 @@
-﻿namespace BlogDraftWebApp.Core;
+namespace BlogDraftWebApp.Core;
 
 public class Class1
 {

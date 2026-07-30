@@ -1,4 +1,4 @@
-﻿namespace BlogDraftWebApp.Api.IntegrationTests;
+namespace BlogDraftWebApp.Api.IntegrationTests;
 
 public class Tests
 {

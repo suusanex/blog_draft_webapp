@@ -2,8 +2,8 @@
 
 ## 前提
 
-- .NET 10 SDK (`dotnet --version` が `10.0.103`)
-- `global.json` により SDK を固定
+- .NET 10 SDK（マイナーバージョンは問いません）
+- `global.json` により利用可能な最新の .NET 10 SDK を選択
 - `src/BlogDraftWebApp/appsettings.json` の必須設定が投入済み
   - `OpenAI:ApiKey`
   - `OpenAI:Model`

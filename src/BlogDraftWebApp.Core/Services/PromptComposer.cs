@@ -51,7 +51,7 @@ public sealed class PromptComposer : IPromptComposer
         return Task.FromResult(new Prompt
         {
             SystemMessage = system.Trim(),
-            RagContext = BuildRagSection(ragChunks),
+            RagContext = BuildRagSection(ragChunks, step: null),
             UserOverview = BuildApprovedUserMessage(plan),
         });
     }

@@ -129,8 +129,8 @@ public sealed class DraftEndpointsTests
             .Setup(x => x.RetrieveAsync(overview, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new RetrievalResult([], null));
         factory.LlmClientMock
-            .Setup(x => x.GenerateAsync(It.IsAny<Prompt>(), It.IsAny<CancellationToken>()))
-            .Callback<Prompt, CancellationToken>((prompt, _) => captured = prompt)
+            .Setup(x => x.GenerateAsync(It.IsAny<Prompt>(), It.IsAny<CancellationToken>(), It.IsAny<int?>()))
+            .Callback<Prompt, CancellationToken, int?>((prompt, _, _) => captured = prompt)
             .ReturnsAsync(new Draft { Content = new string('x', 101), Model = "writer-model" });
 
         using var http = factory.CreateClient();
@@ -237,8 +237,8 @@ public sealed class DraftEndpointsTests
             .Setup(x => x.RetrieveAsync(overview, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new RetrievalResult(chunks, null));
         factory.LlmClientMock
-            .Setup(x => x.GenerateAsync(It.IsAny<Prompt>(), It.IsAny<CancellationToken>()))
-            .Callback<Prompt, CancellationToken>((prompt, _) => generationPrompt = prompt)
+            .Setup(x => x.GenerateAsync(It.IsAny<Prompt>(), It.IsAny<CancellationToken>(), It.IsAny<int?>()))
+            .Callback<Prompt, CancellationToken, int?>((prompt, _, _) => generationPrompt = prompt)
             .ReturnsAsync(new Draft
             {
                 Content = new string('x', 101),
