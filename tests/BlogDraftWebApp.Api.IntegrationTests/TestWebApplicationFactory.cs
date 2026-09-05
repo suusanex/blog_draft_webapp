@@ -12,10 +12,12 @@ namespace BlogDraftWebApp.Api.IntegrationTests;
 public sealed class TestWebApplicationFactory : WebApplicationFactory<Program>
 {
     private readonly bool _includeValidConfiguration;
+    private readonly bool _invalidRagConfiguration;
 
-    public TestWebApplicationFactory(bool includeValidConfiguration = true)
+    public TestWebApplicationFactory(bool includeValidConfiguration = true, bool invalidRagConfiguration = false)
     {
         _includeValidConfiguration = includeValidConfiguration;
+        _invalidRagConfiguration = invalidRagConfiguration;
     }
 
     public Mock<IRetrievalService> RetrievalServiceMock { get; } = new(MockBehavior.Strict);
@@ -37,7 +39,7 @@ public sealed class TestWebApplicationFactory : WebApplicationFactory<Program>
             config.Sources.Clear();
             var values = new Dictionary<string, string?>
             {
-                ["AzureAISearch:Enabled"] = "false",
+                ["AzureAISearch:Enabled"] = _invalidRagConfiguration ? "true" : "false",
                 ["Workflow:DatabasePath"] = "./data/test-workflow.db",
                 ["Workflow:SessionRetentionDays"] = "30",
                 ["Workflow:CleanupSchedule"] = "0 2 * * *",

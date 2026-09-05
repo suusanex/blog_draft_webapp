@@ -9,29 +9,23 @@ public sealed class ConfigurationValidator : IConfigurationValidator
     private readonly ILogger<ConfigurationValidator> _logger;
     private readonly ConfigurationStatus _status;
     private readonly IOptions<LlmOptions> _llmOptions;
-    private readonly IOptions<RagOptions> _ragOptions;
     private readonly IOptions<StyleCardOptions> _styleCardOptions;
     private readonly IValidateOptions<LlmOptions> _llmValidator;
-    private readonly IValidateOptions<RagOptions> _ragValidator;
     private readonly IValidateOptions<StyleCardOptions> _styleCardValidator;
 
     public ConfigurationValidator(
         ILogger<ConfigurationValidator> logger,
         ConfigurationStatus status,
         IOptions<LlmOptions> llmOptions,
-        IOptions<RagOptions> ragOptions,
         IOptions<StyleCardOptions> styleCardOptions,
         IValidateOptions<LlmOptions> llmValidator,
-        IValidateOptions<RagOptions> ragValidator,
         IValidateOptions<StyleCardOptions> styleCardValidator)
     {
         _logger = logger;
         _status = status;
         _llmOptions = llmOptions;
-        _ragOptions = ragOptions;
         _styleCardOptions = styleCardOptions;
         _llmValidator = llmValidator;
-        _ragValidator = ragValidator;
         _styleCardValidator = styleCardValidator;
     }
 
@@ -44,7 +38,6 @@ public sealed class ConfigurationValidator : IConfigurationValidator
             var failures = new List<string>();
 
             AppendFailures(failures, _llmValidator.Validate(name: null, _llmOptions.Value));
-            AppendFailures(failures, _ragValidator.Validate(name: null, _ragOptions.Value));
             AppendFailures(failures, _styleCardValidator.Validate(name: null, _styleCardOptions.Value));
 
             if (failures.Count == 0)

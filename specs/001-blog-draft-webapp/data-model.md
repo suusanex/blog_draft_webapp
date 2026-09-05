@@ -19,12 +19,11 @@
 
 | Property | Type | Required | Description |
 |----------|------|----------|-------------|
-| `Content` | `string` | ✅ | 記事の概要（タイトル案、目的、想定読者、手順の箇条書き等）。最小 10 文字、最大 5000 文字。 |
+| `Content` | `string` | ✅ | 記事の概要（タイトル案、目的、想定読者、手順の箇条書き等）。空でないこと、最大 5000 文字。 |
 
 #### Validation Rules
 
 - `Content` が空または null の場合、エラー: "記事の概要を入力してください"。
-- `Content` が 10 文字未満の場合、エラー: "概要は 10 文字以上入力してください"。
 - `Content` が 5000 文字を超える場合、エラー: "概要は 5000 文字以内で入力してください"。
 
 #### Example
@@ -172,7 +171,7 @@ public class Prompt
 
 #### Validation Rules
 
-- `Content` が 100 文字未満の場合、警告メッセージ: "生成結果が短すぎます。入力内容を詳しくするか、設定を確認してください"。
+- JSON形式でない生成結果や `draft` が空の生成結果は成功扱いにせず、再試行可能な生成エラーとする。
 
 #### Example
 
@@ -206,7 +205,6 @@ public class Draft
 public class GenerateDraftRequest
 {
     [Required(ErrorMessage = "記事の概要を入力してください")]
-    [MinLength(10, ErrorMessage = "概要は 10 文字以上入力してください")]
     [MaxLength(5000, ErrorMessage = "概要は 5000 文字以内で入力してください")]
     public string Overview { get; set; } = string.Empty;
 }
@@ -226,7 +224,7 @@ public class GenerateDraftRequest
 | `Model` | `string` | ✅ | 使用された LLM モデル ID。 |
 | `GeneratedAt` | `DateTimeOffset` | ✅ | 生成日時（UTC）。 |
 | `RagHitCount` | `int` | ✅ | RAG で取得されたチャンク数。 |
-| `Warning` | `string?` | ❌ | 警告メッセージ（例: "生成結果が短すぎます。入力内容を詳しくするか、設定を確認してください"）。 |
+| `Warning` | `string?` | ❌ | 生成結果に関する任意の警告メッセージ。 |
 
 #### Example
 
@@ -259,7 +257,6 @@ public class GenerateDraftResponse
 public class PreviewPromptRequest
 {
     [Required(ErrorMessage = "記事の概要を入力してください")]
-    [MinLength(10, ErrorMessage = "概要は 10 文字以上入力してください")]
     [MaxLength(5000, ErrorMessage = "概要は 5000 文字以内で入力してください")]
     public string Overview { get; set; } = string.Empty;
 }
@@ -497,11 +494,11 @@ stateDiagram-v2
 
 | Entity | Validation | Error Handling |
 |--------|------------|----------------|
-| BlogOverview | 10 ~ 5000 文字 | HTTP 400、エラーメッセージ表示 |
+| BlogOverview | 空でない、最大 5000 文字 | HTTP 400、エラーメッセージ表示 |
 | StyleCard | 起動時に存在確認 | エラーログを出力し、フォールバックなしで起動失敗 |
 | RAGChunk | スコア閾値、空チェック | 除外（ログ記録） |
 | Prompt | 各要素の存在確認 | エラーログ、生成中断 |
-| Draft | 100 文字未満で警告 | 警告メッセージ表示（生成は継続） |
+| Draft | 空でない JSON の `draft` | 形式不正時は再試行可能な生成エラー |
 
 ---
 

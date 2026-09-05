@@ -54,6 +54,11 @@ public sealed class OpenAiLlmClient : ILlmClient
                 },
             };
 
+            if (RequiresJsonResponse(prompt))
+            {
+                body["response_format"] = BuildJsonResponseFormat(prompt);
+            }
+
             if (ShouldUseLowTemperature(prompt) && SupportsCustomTemperature(_options.Model))
             {
                 body["temperature"] = 0.2;
@@ -96,8 +101,17 @@ public sealed class OpenAiLlmClient : ILlmClient
 
             await using var stream = await response.Content.ReadAsStreamAsync(cts.Token);
             using var json = await JsonDocument.ParseAsync(stream, cancellationToken: cts.Token);
-            var content = json.RootElement
-                .GetProperty("choices")[0]
+            var choice = json.RootElement.GetProperty("choices")[0];
+            var finishReason = choice.TryGetProperty("finish_reason", out var finishReasonProperty)
+                ? finishReasonProperty.GetString()
+                : null;
+            if (!string.IsNullOrWhiteSpace(finishReason)
+                && !string.Equals(finishReason, "stop", StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.LogWarning("LLM output did not terminate normally. FinishReason={FinishReason}", finishReason);
+            }
+
+            var content = choice
                 .GetProperty("message")
                 .GetProperty("content")
                 .GetString() ?? string.Empty;
@@ -132,8 +146,132 @@ public sealed class OpenAiLlmClient : ILlmClient
 
     private static bool ShouldUseLowTemperature(Prompt prompt)
     {
-        return prompt.UserOverview.Contains("アウトライン生成（厳格フォーマット）", StringComparison.Ordinal)
-            || prompt.UserOverview.Contains("アウトライン再整形", StringComparison.Ordinal);
+        return prompt.UserOverview.Contains(PromptComposer.OutlineHeading, StringComparison.Ordinal)
+            || prompt.UserOverview.Contains(PromptComposer.OutlineRepairHeading, StringComparison.Ordinal);
+    }
+
+    private static bool RequiresJsonResponse(Prompt prompt)
+    {
+        return prompt.UserOverview.Contains("- JSON のみを返す", StringComparison.Ordinal);
+    }
+
+    private static object BuildJsonResponseFormat(Prompt prompt)
+    {
+        var isOutline = prompt.UserOverview.Contains(PromptComposer.OutlineHeading, StringComparison.Ordinal)
+            || prompt.UserOverview.Contains(PromptComposer.OutlineRepairHeading, StringComparison.Ordinal);
+
+        return new Dictionary<string, object?>
+        {
+            ["type"] = "json_schema",
+            ["json_schema"] = new Dictionary<string, object?>
+            {
+                ["name"] = isOutline ? "blog_outline_response" : "blog_draft_response",
+                ["strict"] = true,
+                ["schema"] = isOutline ? BuildOutlineSchema() : BuildDraftSchema(),
+            },
+        };
+    }
+
+    private static Dictionary<string, object?> BuildDraftSchema()
+    {
+        return new Dictionary<string, object?>
+        {
+            ["type"] = "object",
+            ["additionalProperties"] = false,
+            ["properties"] = new Dictionary<string, object?>
+            {
+                ["draft"] = new Dictionary<string, object?> { ["type"] = "string" },
+                ["openQuestions"] = new Dictionary<string, object?>
+                {
+                    ["type"] = "array",
+                    ["items"] = new Dictionary<string, object?> { ["type"] = "string" },
+                },
+            },
+            ["required"] = new[] { "draft", "openQuestions" },
+        };
+    }
+
+    private static Dictionary<string, object?> BuildOutlineSchema()
+    {
+        var meaningElementSchema = new Dictionary<string, object?>
+        {
+            ["type"] = "object",
+            ["additionalProperties"] = false,
+            ["properties"] = new Dictionary<string, object?>
+            {
+                ["source"] = new Dictionary<string, object?> { ["type"] = new[] { "string", "null" } },
+                ["role"] = new Dictionary<string, object?> { ["type"] = new[] { "string", "null" } },
+            },
+            ["required"] = new[] { "source", "role" },
+        };
+        var sectionScopeSchema = new Dictionary<string, object?>
+        {
+            ["type"] = "object",
+            ["additionalProperties"] = false,
+            ["properties"] = new Dictionary<string, object?>
+            {
+                ["heading"] = new Dictionary<string, object?> { ["type"] = new[] { "string", "null" } },
+                ["covers"] = new Dictionary<string, object?>
+                {
+                    ["type"] = "array",
+                    ["items"] = new Dictionary<string, object?> { ["type"] = "string" },
+                },
+                ["allowedSupplement"] = new Dictionary<string, object?> { ["type"] = new[] { "string", "null" } },
+                ["doNotAdd"] = new Dictionary<string, object?> { ["type"] = new[] { "string", "null" } },
+            },
+            ["required"] = new[] { "heading", "covers", "allowedSupplement", "doNotAdd" },
+        };
+        var memoSchema = new Dictionary<string, object?>
+        {
+            ["type"] = new[] { "object", "null" },
+            ["additionalProperties"] = false,
+            ["properties"] = new Dictionary<string, object?>
+            {
+                ["meaningElements"] = new Dictionary<string, object?>
+                {
+                    ["type"] = "array",
+                    ["items"] = meaningElementSchema,
+                },
+                ["logicalRelations"] = new Dictionary<string, object?>
+                {
+                    ["type"] = "array",
+                    ["items"] = new Dictionary<string, object?> { ["type"] = "string" },
+                },
+                ["articleQuestion"] = new Dictionary<string, object?> { ["type"] = new[] { "string", "null" } },
+                ["readerAssumption"] = new Dictionary<string, object?> { ["type"] = new[] { "string", "null" } },
+                ["scopeBySection"] = new Dictionary<string, object?>
+                {
+                    ["type"] = "array",
+                    ["items"] = sectionScopeSchema,
+                },
+                ["openQuestions"] = new Dictionary<string, object?>
+                {
+                    ["type"] = "array",
+                    ["items"] = new Dictionary<string, object?> { ["type"] = "string" },
+                },
+            },
+            ["required"] = new[]
+            {
+                "meaningElements",
+                "logicalRelations",
+                "articleQuestion",
+                "readerAssumption",
+                "scopeBySection",
+                "openQuestions",
+            },
+        };
+
+        return new Dictionary<string, object?>
+        {
+            ["type"] = "object",
+            ["additionalProperties"] = false,
+            ["properties"] = new Dictionary<string, object?>
+            {
+                ["outline"] = new Dictionary<string, object?> { ["type"] = "string" },
+                ["editorialMemo"] = memoSchema,
+            },
+            ["required"] = new[] { "outline", "editorialMemo" },
+        };
     }
 
     private static bool SupportsCustomTemperature(string model)

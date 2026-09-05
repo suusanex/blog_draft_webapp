@@ -98,6 +98,15 @@ public sealed class AzureAISearchService : IRetrievalService
             return new RetrievalResult(Array.Empty<RAGChunk>(), null);
         }
 
+        var validation = new RagOptionsValidator().Validate(name: null, _options);
+        if (!validation.Succeeded)
+        {
+            var details = validation.Failures is null
+                ? "Azure AI Search configuration is invalid."
+                : string.Join(" ", validation.Failures);
+            throw new ConfigurationException(details);
+        }
+
         try
         {
             var client = _searchClientFactory.CreateClient(_options);

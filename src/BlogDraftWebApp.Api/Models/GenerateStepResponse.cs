@@ -10,4 +10,6 @@ public sealed class GenerateStepResponse
     public DateTimeOffset GeneratedAt { get; set; }
     public string? Warning { get; set; }
     public int? OutlineMaxOutputTokens { get; set; }
+    public List<string> OpenQuestions { get; set; } = new();
+    public string? EditorialMemoJson { get; set; }
 }

@@ -21,6 +21,11 @@ public sealed class LlmErrorClassifier
                 return new LlmErrorInfo("CONFIG_ERROR", "システムが正しく構成されていません。管理者に連絡してください", false, 500);
             }
 
+            if (string.Equals(llmException.ErrorCode, "LLM_OUTPUT_INVALID", StringComparison.Ordinal))
+            {
+                return new LlmErrorInfo("LLM_OUTPUT_INVALID", "生成結果の形式が不正です。もう一度お試しください", llmException.IsRetryable, 502);
+            }
+
             return new LlmErrorInfo("LLM_ERROR", "LLM サービスでエラーが発生しました", llmException.IsRetryable, 502);
         }
 

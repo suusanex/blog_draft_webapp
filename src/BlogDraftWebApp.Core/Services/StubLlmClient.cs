@@ -25,17 +25,22 @@ public sealed class StubLlmClient : ILlmClient
 
     private static string BuildContent(Prompt prompt)
     {
-        if (prompt.UserOverview.Contains("アウトライン再整形", StringComparison.Ordinal)
-            || prompt.UserOverview.Contains("アウトライン生成（厳格フォーマット）", StringComparison.Ordinal))
+        if (prompt.UserOverview.Contains(PromptComposer.OutlineRepairHeading, StringComparison.Ordinal)
+            || prompt.UserOverview.Contains(PromptComposer.OutlineHeading, StringComparison.Ordinal))
         {
-            return string.Join("\n", new[]
-            {
-                "- 背景",
-                "  - 課題",
-                "- 目的",
-                "  - 対象読者",
-                "- 結論",
-            });
+            return """
+                {
+                  "outline": "- 背景\n  - 課題\n- 目的\n  - 対象読者\n- 結論",
+                  "editorialMemo": {
+                    "meaningElements": [{ "source": "入力の要点", "role": "主張" }],
+                    "logicalRelations": [],
+                    "articleQuestion": "テスト",
+                    "readerAssumption": "基本操作を知る実務者",
+                    "scopeBySection": [],
+                    "openQuestions": []
+                  }
+                }
+                """;
         }
 
         if (prompt.UserOverview.Contains("タイトル案と冒頭段落案の生成", StringComparison.Ordinal))
@@ -48,6 +53,7 @@ public sealed class StubLlmClient : ILlmClient
             });
         }
 
-        return "# テスト下書き\n\nこれは E2E テスト用のスタブ出力です。\n\n" + new string('あ', 150);
+        var draftBody = "# テスト下書き\n\nこれは E2E テスト用のスタブ出力です。\n\n" + new string('あ', 150);
+        return "{\n  \"draft\": " + System.Text.Json.JsonSerializer.Serialize(draftBody) + ",\n  \"openQuestions\": []\n}";
     }
 }

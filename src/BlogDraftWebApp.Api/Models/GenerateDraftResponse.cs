@@ -7,4 +7,5 @@ public sealed class GenerateDraftResponse
     public DateTimeOffset GeneratedAt { get; set; }
     public int RagHitCount { get; set; }
     public string? Warning { get; set; }
+    public List<string> OpenQuestions { get; set; } = new();
 }

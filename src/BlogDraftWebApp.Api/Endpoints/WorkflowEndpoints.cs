@@ -12,7 +12,6 @@ namespace BlogDraftWebApp.Api.Endpoints;
 
 public static class WorkflowEndpoints
 {
-    private const int MinDraftLength = 100;
     private const int MaxDraftLength = 50000;
 
     public static IEndpointRouteBuilder MapWorkflowEndpoints(this IEndpointRouteBuilder app)
@@ -58,9 +57,11 @@ public static class WorkflowEndpoints
                 OutlineGenerated = session.OutlineGenerated,
                 OutlineEdited = session.OutlineEdited,
                 OutlineConfirmed = session.OutlineConfirmed,
+                EditorialMemoJson = session.EditorialMemoJson,
                 DraftGenerated = session.DraftGenerated,
                 DraftEdited = session.DraftEdited,
                 DraftConfirmed = session.DraftConfirmed,
+                OpenQuestions = session.OpenQuestions,
                 TitleHookOptions = session.TitleHookOptions,
                 TitleHookSelected = session.TitleHookSelected,
                 TitleHookConfirmed = session.TitleHookConfirmed,
@@ -160,6 +161,8 @@ public static class WorkflowEndpoints
                 GeneratedAt = result.GeneratedAt,
                 Warning = result.Warning,
                 OutlineMaxOutputTokens = options.Value.OutlineMaxOutputTokens,
+                OpenQuestions = result.OpenQuestions.ToList(),
+                EditorialMemoJson = result.EditorialMemoJson,
             });
         });
 
@@ -235,6 +238,8 @@ public static class WorkflowEndpoints
                 Model = result.Model,
                 GeneratedAt = result.GeneratedAt,
                 Warning = result.Warning,
+                OpenQuestions = result.OpenQuestions.ToList(),
+                EditorialMemoJson = result.EditorialMemoJson,
             });
         });
 
@@ -323,18 +328,6 @@ public static class WorkflowEndpoints
             });
         }
 
-        if (overview.Length < 10)
-        {
-            return Results.BadRequest(new ErrorResponse
-            {
-                ErrorCode = "INVALID_REQUEST",
-                Message = "概要は 10 文字以上入力してください",
-                Details = env.IsDevelopment() ? "Overview must be at least 10 characters" : null,
-                RequestId = httpContext.TraceIdentifier,
-                IsRetryable = false,
-            });
-        }
-
         if (overview.Length > 5000)
         {
             return Results.BadRequest(new ErrorResponse
@@ -376,18 +369,6 @@ public static class WorkflowEndpoints
                 ErrorCode = "INVALID_REQUEST",
                 Message = "下書きを入力してください",
                 Details = env.IsDevelopment() ? "Draft field is required" : null,
-                RequestId = httpContext.TraceIdentifier,
-                IsRetryable = false,
-            });
-        }
-
-        if (draft.Length < MinDraftLength)
-        {
-            return Results.BadRequest(new ErrorResponse
-            {
-                ErrorCode = "INVALID_REQUEST",
-                Message = $"下書きは {MinDraftLength} 文字以上入力してください",
-                Details = env.IsDevelopment() ? $"Draft must be at least {MinDraftLength} characters" : null,
                 RequestId = httpContext.TraceIdentifier,
                 IsRetryable = false,
             });

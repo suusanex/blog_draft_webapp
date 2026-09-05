@@ -21,7 +21,9 @@ public sealed record WorkflowGenerateResult(
     int RagHitCount,
     string Model,
     DateTimeOffset GeneratedAt,
-    string? Warning);
+    string? Warning,
+    IReadOnlyList<string> OpenQuestions,
+    string? EditorialMemoJson);
 
 public sealed record WorkflowPreviewResult(
     string Prompt,

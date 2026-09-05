@@ -1,0 +1,12 @@
+name: persistent-purpose-review
+version: 0.3.0
+description: Same-session purpose review and parent-owned remediation through an independently installed CLI Runner
+type: hybrid
+targets:
+  - copilot
+  - codex
+  - agent-skills
+includes: auto
+
+dependencies:
+  apm: []

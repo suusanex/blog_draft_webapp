@@ -1,5 +1,4 @@
 using BlogDraftWebApp.Api.Models;
-using BlogDraftWebApp.Core.Configuration;
 using BlogDraftWebApp.Core.Exceptions;
 using BlogDraftWebApp.Core.Models;
 using BlogDraftWebApp.Core.Services;
@@ -7,17 +6,17 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Options;
 
 namespace BlogDraftWebApp.Api.Endpoints;
 
 public static class DraftEndpoints
 {
+    private const string BrokenOutputWarning = "生成結果が空、または壊れている可能性があります";
+
     public static IEndpointRouteBuilder MapDraftEndpoints(this IEndpointRouteBuilder app)
     {
         app.MapPost("/draft/preview", async (
             PreviewPromptRequest request,
-            IRetrievalService retrievalService,
             IPromptComposer promptComposer,
             StyleCard styleCard,
             IHostEnvironment env,
@@ -30,20 +29,17 @@ public static class DraftEndpoints
                 return validationError;
             }
 
-            var retrieval = await retrievalService.RetrieveAsync(request!.Overview, cancellationToken);
-            var prompt = await promptComposer.ComposeAsync(new BlogOverview(request.Overview), retrieval.Chunks, styleCard, cancellationToken);
+            var prompt = await promptComposer.ComposeAsync(new BlogOverview(request!.Overview), styleCard, cancellationToken);
 
             return Results.Ok(new PreviewPromptResponse
             {
                 Prompt = prompt.FullPrompt,
-                RagHitCount = retrieval.Chunks.Count,
-                Warning = retrieval.Warning,
+                RagHitCount = 0,
             });
         });
 
         app.MapPost("/draft", async (
             GenerateDraftRequest request,
-            IRetrievalService retrievalService,
             IPromptComposer promptComposer,
             ILlmClient llmClient,
             StyleCard styleCard,
@@ -57,23 +53,51 @@ public static class DraftEndpoints
                 return validationError;
             }
 
-            var retrieval = await retrievalService.RetrieveAsync(request!.Overview, cancellationToken);
-            var prompt = await promptComposer.ComposeAsync(new BlogOverview(request.Overview), retrieval.Chunks, styleCard, cancellationToken);
-            var draft = await llmClient.GenerateAsync(prompt, cancellationToken);
-
-            var warning = retrieval.Warning;
-            if (draft.Content.Trim().Length < 100)
+            var prompt = await promptComposer.ComposeAsync(new BlogOverview(request!.Overview), styleCard, cancellationToken);
+            var generated = await llmClient.GenerateAsync(prompt, cancellationToken);
+            var parsed = GeneratedContentParser.ParseDraft(generated.Content);
+            if (!parsed.IsValid)
             {
-                warning = "生成結果が短すぎます。入力内容を詳しくするか、設定を確認してください";
+                var initialGenerated = generated;
+                generated = await llmClient.GenerateAsync(
+                    promptComposer.ComposeDraftRepair(
+                        new BlogOverview(request!.Overview),
+                        styleCard,
+                        generated.Content,
+                        parsed.ErrorMessage ?? "下書き生成結果を解釈できませんでした。"),
+                    cancellationToken);
+                parsed = GeneratedContentParser.ParseDraft(generated.Content);
+                if (!parsed.IsValid
+                    && GeneratedContentParser.TryRecoverMarkdownDraft(generated.Content, out var recovered))
+                {
+                    parsed = recovered;
+                }
+                else if (!parsed.IsValid
+                    && GeneratedContentParser.TryRecoverMarkdownDraft(initialGenerated.Content, out recovered))
+                {
+                    generated = initialGenerated;
+                    parsed = recovered;
+                }
             }
+
+            if (!parsed.IsValid)
+            {
+                throw new LlmException(
+                    "LLM_OUTPUT_INVALID",
+                    parsed.ErrorMessage ?? "下書き生成結果を解釈できませんでした。",
+                    isRetryable: true);
+            }
+
+            var warning = string.IsNullOrWhiteSpace(parsed.Draft) ? BrokenOutputWarning : null;
 
             return Results.Ok(new GenerateDraftResponse
             {
-                Draft = draft.Content,
-                Model = draft.Model,
-                GeneratedAt = draft.GeneratedAt,
-                RagHitCount = retrieval.Chunks.Count,
+                Draft = parsed.Draft,
+                Model = generated.Model,
+                GeneratedAt = generated.GeneratedAt,
+                RagHitCount = 0,
                 Warning = warning,
+                OpenQuestions = parsed.OpenQuestions.ToList(),
             });
         });
 
@@ -89,18 +113,6 @@ public static class DraftEndpoints
                 ErrorCode = "INVALID_REQUEST",
                 Message = "記事の概要を入力してください",
                 Details = env.IsDevelopment() ? "Overview field is required" : null,
-                RequestId = httpContext.TraceIdentifier,
-                IsRetryable = false,
-            });
-        }
-
-        if (overview.Length < 10)
-        {
-            return Results.BadRequest(new ErrorResponse
-            {
-                ErrorCode = "INVALID_REQUEST",
-                Message = "概要は 10 文字以上入力してください",
-                Details = env.IsDevelopment() ? "Overview must be at least 10 characters" : null,
                 RequestId = httpContext.TraceIdentifier,
                 IsRetryable = false,
             });

@@ -64,14 +64,6 @@ else
         </button>
     </div>
 
-    @if (_refreshDiff is not null)
-    {
-        <div class="alert alert-info">
-            <div>RAG差分: +@_refreshDiff.AddedChunkCount / -@_refreshDiff.RemovedChunkCount (rate=@_refreshDiff.ChangeRate)</div>
-            <button class="btn btn-sm btn-primary mt-2" @onclick="ConfirmRagRefreshAsync">この差分を採用</button>
-        </div>
-    }
-
     <!-- Edit Area -->
     <div class="mb-4">
         <label class="form-label">アウトライン</label>
@@ -81,6 +73,15 @@ else
             <small class="text-muted">@_autoSaveMessage</small>
         }
     </div>
+
+    @if (!string.IsNullOrWhiteSpace(_editorialMemoJson))
+    {
+        <details class="mb-4">
+            <summary>編集メモ（保持と説明範囲の案内）</summary>
+            <p class="text-muted mt-2">入力を選別して捨てる契約ではありません。本文生成には元入力全文も渡します。</p>
+            <pre class="border p-3" style="white-space: pre-wrap;">@_editorialMemoJson</pre>
+        </details>
+    }
 
     <!-- Confirm and Next -->
     @if (_currentStep is "Step1_Outline")
@@ -106,7 +107,6 @@ else
         <summary class="btn btn-link">▼ 詳細オプション</summary>
         <div class="mt-3 d-flex flex-column gap-2">
             <button class="btn btn-outline-secondary" @onclick="PreviewOutlineAsync">プロンプトを確認</button>
-            <button class="btn btn-outline-warning" @onclick="RefreshRagAsync">RAG再検索</button>
             <button class="btn btn-outline-secondary" @onclick="() => SaveOutlineAsync()">手動保存</button>
         </div>
     </details>
@@ -157,7 +157,6 @@ else
     private sealed class WorkflowOutlineViewModel
     {
         [Required(ErrorMessage = "記事の概要を入力してください")]
-        [MinLength(10, ErrorMessage = "概要は 10 文字以上入力してください")]
         [MaxLength(5000, ErrorMessage = "概要は 5000 文字以内で入力してください")]
         public string Overview { get; set; } = string.Empty;
     }
@@ -168,7 +167,7 @@ else
     private string _outlineContent = string.Empty;
     private string? _warning;
     private string? _promptPreview;
-    private RefreshRagSnapshotResponse? _refreshDiff;
+    private string? _editorialMemoJson;
     private ErrorResponse? _error;
     private bool _isBusy;
     private string? _autoSaveMessage;
@@ -221,7 +220,7 @@ else
         _error = null;
         _warning = null;
         _promptPreview = null;
-        _refreshDiff = null;
+        _editorialMemoJson = null;
 
         try
         {
@@ -284,6 +283,7 @@ else
                         ?? payload.OutlineEdited
                         ?? payload.OutlineGenerated
                         ?? string.Empty;
+                    _editorialMemoJson = payload.EditorialMemoJson;
                     return;
                 }
             }
@@ -334,6 +334,7 @@ else
                 {
                     _outlineContent = payload.Generated;
                     _warning = payload.Warning;
+                    _editorialMemoJson = payload.EditorialMemoJson;
                     _promptPreview = null;
                     return;
                 }
@@ -480,64 +481,6 @@ else
                 Message = "エラーが発生しました",
                 IsRetryable = false,
             };
-        }
-        finally
-        {
-            _isBusy = false;
-        }
-    }
-
-    private async Task RefreshRagAsync()
-    {
-        if (string.IsNullOrWhiteSpace(_sessionId))
-        {
-            return;
-        }
-
-        _isBusy = true;
-        _error = null;
-
-        try
-        {
-            var http = CreateHttpClient();
-            var response = await http.PostAsync($"/workflow/sessions/{_sessionId}/rag/refresh", content: null);
-            if (response.StatusCode == HttpStatusCode.OK)
-            {
-                _refreshDiff = await response.Content.ReadFromJsonAsync<RefreshRagSnapshotResponse>();
-                return;
-            }
-
-            _error = await response.Content.ReadFromJsonAsync<ErrorResponse>();
-            _error ??= new ErrorResponse { Message = "RAG再検索に失敗しました", IsRetryable = false };
-        }
-        finally
-        {
-            _isBusy = false;
-        }
-    }
-
-    private async Task ConfirmRagRefreshAsync()
-    {
-        if (string.IsNullOrWhiteSpace(_sessionId))
-        {
-            return;
-        }
-
-        _isBusy = true;
-        _error = null;
-
-        try
-        {
-            var http = CreateHttpClient();
-            var response = await http.PostAsync($"/workflow/sessions/{_sessionId}/rag/refresh/confirm", content: null);
-            if (response.StatusCode == HttpStatusCode.OK)
-            {
-                _refreshDiff = null;
-                return;
-            }
-
-            _error = await response.Content.ReadFromJsonAsync<ErrorResponse>();
-            _error ??= new ErrorResponse { Message = "RAG再検索確定に失敗しました", IsRetryable = false };
         }
         finally
         {

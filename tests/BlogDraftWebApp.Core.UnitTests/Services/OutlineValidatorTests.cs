@@ -8,11 +8,11 @@ public sealed class OutlineValidatorTests
 {
     private static readonly WorkflowOptions DefaultOptions = new()
     {
-        OutlineMinLines = 5,
-        OutlineMaxLines = 15,
+        OutlineMinLines = 1,
+        OutlineMaxLines = 80,
         OutlineMaxDepth = 2,
         OutlineMaxLineLength = 120,
-        OutlineMaxTotalChars = 2000,
+        OutlineMaxTotalChars = 8000,
     };
 
     [Test]
@@ -29,6 +29,23 @@ public sealed class OutlineValidatorTests
         });
 
         Assert.DoesNotThrow(() => validator.ValidateOrThrow(content, DefaultOptions));
+    }
+
+    [Test]
+    public void ValidateOrThrow_1行_例外を投げない()
+    {
+        var validator = new OutlineValidator();
+
+        Assert.DoesNotThrow(() => validator.ValidateOrThrow("- 一点だけ", DefaultOptions));
+    }
+
+    [Test]
+    public void ValidateOrThrow_20行_例外を投げない()
+    {
+        var validator = new OutlineValidator();
+        var lines = Enumerable.Range(1, 20).Select(i => $"- item {i}");
+
+        Assert.DoesNotThrow(() => validator.ValidateOrThrow(string.Join("\n", lines), DefaultOptions));
     }
 
     [TestCase("# 見出し\n- a\n- b\n- c\n- d", "箇条書き")]
@@ -69,13 +86,25 @@ public sealed class OutlineValidatorTests
     public void ValidateOrThrow_行数超過_例外を投げる()
     {
         var validator = new OutlineValidator();
-        var lines = Enumerable.Range(1, 16).Select(i => $"- item {i}");
+        var lines = Enumerable.Range(1, 81).Select(i => $"- item {i}");
 
         var ex = Assert.Throws<OutlineConstraintViolationException>(() =>
             validator.ValidateOrThrow(string.Join("\n", lines), DefaultOptions));
 
         Assert.That(ex, Is.Not.Null);
         Assert.That(ex!.Message, Does.Contain("行数"));
+    }
+
+    [Test]
+    public void ValidateOrThrow_空_例外を投げる()
+    {
+        var validator = new OutlineValidator();
+
+        var ex = Assert.Throws<OutlineConstraintViolationException>(() =>
+            validator.ValidateOrThrow("   ", DefaultOptions));
+
+        Assert.That(ex, Is.Not.Null);
+        Assert.That(ex!.Message, Does.Contain("アウトラインを入力してください"));
     }
 
     [Test]

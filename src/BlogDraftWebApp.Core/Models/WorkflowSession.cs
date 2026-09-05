@@ -18,9 +18,11 @@ public sealed class WorkflowSession
     public string? OutlineGenerated { get; set; }
     public string? OutlineEdited { get; set; }
     public string? OutlineConfirmed { get; set; }
+    public string? EditorialMemoJson { get; set; }
     public string? DraftGenerated { get; set; }
     public string? DraftEdited { get; set; }
     public string? DraftConfirmed { get; set; }
+    public List<string>? OpenQuestions { get; set; }
     public List<TitleHook>? TitleHookOptions { get; set; }
     public TitleHook? TitleHookSelected { get; set; }
     public TitleHook? TitleHookConfirmed { get; set; }

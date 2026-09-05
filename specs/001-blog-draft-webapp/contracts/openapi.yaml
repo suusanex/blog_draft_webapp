@@ -81,18 +81,6 @@ paths:
                     generatedAt: "2026-01-11T10:30:00Z"
                     ragHitCount: 3
                     warning: null
-                shortOutputWarning:
-                  summary: 生成結果が短すぎる
-                  value:
-                    draft: |
-                      # Azure Functions で Durable Functions を使った非同期処理
-                      
-                      ## 概要
-                      要点のみを簡潔に記述
-                    model: gpt-4o
-                    generatedAt: "2026-01-11T10:30:00Z"
-                    ragHitCount: 1
-                    warning: "生成結果が短すぎます。入力内容を詳しくするか、設定を確認してください"
         '400':
           description: リクエストのバリデーションエラー
           content:
@@ -107,13 +95,6 @@ paths:
                     message: 記事の概要を入力してください
                     details: "Overview field is required"
                     requestId: "req_12345"
-                tooShort:
-                  summary: 概要が短すぎる
-                  value:
-                    errorCode: INVALID_REQUEST
-                    message: 概要は 10 文字以上入力してください
-                    details: "Overview must be at least 10 characters"
-                    requestId: "req_12346"
         '500':
           description: サーバ内部エラー
           content:
@@ -262,7 +243,6 @@ components:
       properties:
         overview:
           type: string
-          minLength: 10
           maxLength: 5000
           description: |
             ユーザーが入力した記事の概要。
@@ -311,9 +291,9 @@ components:
           type: string
           nullable: true
           description: |
-            警告メッセージ。生成結果が 100 文字未満などの注意事項を通知。
+            生成結果に関する任意の警告メッセージ。
             null の場合は警告なし。
-          example: "生成結果が短すぎます。入力内容を詳しくするか、設定を確認してください"
+          example: null
 
     PreviewPromptRequest:
       type: object
@@ -322,7 +302,6 @@ components:
       properties:
         overview:
           type: string
-          minLength: 10
           maxLength: 5000
           description: |
             ユーザーが入力した記事の概要。
