@@ -79,7 +79,6 @@ var useStubLlm = builder.Configuration.GetValue<bool>("E2E:StubLlm");
     }
 
 builder.Services.AddSingleton<IValidateOptions<LlmOptions>, LlmOptionsValidator>();
-builder.Services.AddSingleton<IValidateOptions<RagOptions>, RagOptionsValidator>();
 builder.Services.AddSingleton<IValidateOptions<StyleCardOptions>, StyleCardOptionsValidator>();
 builder.Services.AddSingleton<IPostConfigureOptions<LlmOptions>, LlmOptionsPostConfigure>();
 builder.Services.AddSingleton<IPostConfigureOptions<StyleCardOptions>, StyleCardPostConfigure>();

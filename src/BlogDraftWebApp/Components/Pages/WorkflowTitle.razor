@@ -109,7 +109,6 @@
     private sealed class TitleHookViewModel
     {
         [Required(ErrorMessage = "本文を入力してください")]
-        [MinLength(100, ErrorMessage = "本文は 100 文字以上入力してください")]
         [MaxLength(50000, ErrorMessage = "本文は 50000 文字以内で入力してください")]
         public string ArticleBody { get; set; } = string.Empty;
     }

@@ -780,7 +780,7 @@ public void TransitionToStep(WorkflowStep newStep)
 
 **Format**: Markdown 形式のテキスト（Mermaid 図、コードブロックを含む可能性あり）。
 
-**Validation**: 最小 100 文字、最大 50000 文字（UI とサーバー側で検証）。
+**Validation**: 空文字は拒否し、最大 50000 文字（UI とサーバー側で検証）。短さは生成可否の条件にしない。
 
 ---
 

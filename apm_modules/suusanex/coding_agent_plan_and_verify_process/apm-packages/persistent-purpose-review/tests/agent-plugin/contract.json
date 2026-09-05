@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "package": "persistent-purpose-review",
+  "installTargets": ["copilot", "codex", "agent-skills"],
+  "ownedSkills": ["persistent-purpose-review"],
+  "ownedAgents": [],
+  "ownedInstructions": [],
+  "dependencies": [],
+  "runtimeBoundary": "purpose-review-runner 0.2.2 or later is an independently installed external CLI and is not contained in the plugin."
+}

@@ -36,10 +36,6 @@ public sealed class WorkflowEndpointsTests
     {
         await using var factory = new TestWebApplicationFactory();
 
-        factory.RetrievalServiceMock
-            .Setup(x => x.RetrieveAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new RetrievalResult(new List<RAGChunk>(), null));
-
         factory.LlmClientMock
             .Setup(x => x.GenerateAsync(It.IsAny<Prompt>(), It.IsAny<CancellationToken>(), It.IsAny<int?>()))
             .ReturnsAsync(new Draft { Content = ValidOutline, Model = "test", GeneratedAt = DateTimeOffset.UtcNow });
@@ -124,19 +120,6 @@ public sealed class WorkflowEndpointsTests
     {
         await using var factory = new TestWebApplicationFactory();
 
-        factory.RetrievalServiceMock
-            .Setup(x => x.RetrieveAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new RetrievalResult(new List<RAGChunk>
-            {
-                new()
-                {
-                    Text = "rag chunk",
-                    Score = 0.9,
-                    SourceTitle = "t1",
-                    SourceUrl = "https://example.com/1",
-                },
-            }, null));
-
         using var http = factory.CreateClient();
 
         var createResponse = await http.PostAsJsonAsync("/workflow/sessions", new CreateSessionRequest
@@ -152,29 +135,19 @@ public sealed class WorkflowEndpointsTests
 
         var payload = await response.Content.ReadFromJsonAsync<PreviewPromptResponse>();
         Assert.That(payload, Is.Not.Null);
-        Assert.That(payload!.Prompt, Does.Contain("アウトライン生成"));
-        Assert.That(payload.RagHitCount, Is.EqualTo(1));
+        Assert.That(payload!.Prompt, Does.Contain("アウトラインと編集メモの生成"));
+        Assert.That(payload.Prompt, Does.Contain("[編集方針: 入力保持・限定補足]"));
+        Assert.That(payload.Prompt, Does.Not.Contain("過去記事からの関連情報"));
+        Assert.That(payload.RagHitCount, Is.EqualTo(0));
 
         factory.LlmClientMock.Verify(x => x.GenerateAsync(It.IsAny<Prompt>(), It.IsAny<CancellationToken>(), It.IsAny<int?>()), Times.Never);
+        factory.RetrievalServiceMock.Verify(x => x.RetrieveAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Test]
     public async Task PreviewAndGenerateOutline_PromptAreEquivalent()
     {
         await using var factory = new TestWebApplicationFactory();
-
-        factory.RetrievalServiceMock
-            .Setup(x => x.RetrieveAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new RetrievalResult(new List<RAGChunk>
-            {
-                new()
-                {
-                    Text = "same chunk",
-                    Score = 0.9,
-                    SourceTitle = "t1",
-                    SourceUrl = "https://example.com/1",
-                },
-            }, null));
 
         Prompt? executedPrompt = null;
         factory.LlmClientMock
@@ -211,10 +184,6 @@ public sealed class WorkflowEndpointsTests
     public async Task ConcurrentGenerateSameSession_ReturnsSessionBusy409()
     {
         await using var factory = new TestWebApplicationFactory();
-
-        factory.RetrievalServiceMock
-            .Setup(x => x.RetrieveAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new RetrievalResult(new List<RAGChunk>(), null));
 
         factory.LlmClientMock
             .Setup(x => x.GenerateAsync(It.IsAny<Prompt>(), It.IsAny<CancellationToken>(), It.IsAny<int?>()))
@@ -346,6 +315,14 @@ public sealed class WorkflowEndpointsTests
             Regenerate = false,
         });
         Assert.That(generateResponse.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        factory.RetrievalServiceMock.Verify(
+            x => x.RetrieveAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+
+        var firstRefresh = await http.PostAsync($"/workflow/sessions/{created.SessionId}/rag/refresh", content: null);
+        Assert.That(firstRefresh.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        var firstConfirm = await http.PostAsync($"/workflow/sessions/{created.SessionId}/rag/refresh/confirm", content: null);
+        Assert.That(firstConfirm.StatusCode, Is.EqualTo(HttpStatusCode.OK));
 
         var refreshResponse = await http.PostAsync($"/workflow/sessions/{created.SessionId}/rag/refresh", content: null);
         Assert.That(refreshResponse.StatusCode, Is.EqualTo(HttpStatusCode.OK));
@@ -367,10 +344,6 @@ public sealed class WorkflowEndpointsTests
     public async Task GenerateOutline_StripsPreambleAndCodeFence_WhenGeneratedContentIsSalvageable()
     {
         await using var factory = new TestWebApplicationFactory();
-
-        factory.RetrievalServiceMock
-            .Setup(x => x.RetrieveAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new RetrievalResult(new List<RAGChunk>(), null));
 
         factory.LlmClientMock
             .Setup(x => x.GenerateAsync(It.IsAny<Prompt>(), It.IsAny<CancellationToken>(), It.IsAny<int?>()))
@@ -406,15 +379,11 @@ public sealed class WorkflowEndpointsTests
     {
         await using var factory = new TestWebApplicationFactory();
 
-        factory.RetrievalServiceMock
-            .Setup(x => x.RetrieveAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new RetrievalResult(new List<RAGChunk>(), null));
-
         factory.LlmClientMock
             .Setup(x => x.GenerateAsync(It.IsAny<Prompt>(), It.IsAny<CancellationToken>(), It.IsAny<int?>()))
             .ReturnsAsync(new Draft
             {
-                Content = "1. 背景\n2. 課題\n3. 目的\n4. 対象読者",
+                Content = "これはアウトラインではありません。説明文だけです。",
                 Model = "test",
                 GeneratedAt = DateTimeOffset.UtcNow,
             });
@@ -443,7 +412,6 @@ public sealed class WorkflowEndpointsTests
     [TestCase("# 見出し\n- a\n- b\n- c\n- d")]
     [TestCase("1. 番号\n- a\n- b\n- c\n- d")]
     [TestCase("- a\n  - b\n    - c\n      - d\n- e")]
-    [TestCase("- 1\n- 2\n- 3\n- 4")]
     public async Task SaveOutline_AllowsInvalidFormatsUntilConfirm(string invalidOutline)
     {
         await using var factory = new TestWebApplicationFactory();

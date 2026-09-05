@@ -8,8 +8,8 @@ namespace BlogDraftWebApp.Core.Services;
 
 public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
 {
-    private const int MinDraftLength = 100;
     private const int MaxDraftLength = 50000;
+    private const string BrokenOutputWarning = "生成結果が空、または壊れている可能性があります";
 
     private readonly IWorkflowRepository _repository;
     private readonly IRetrievalService _retrievalService;
@@ -155,37 +155,85 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
             throw new InvalidStateTransitionException($"Cannot generate step {step} from {session.CurrentStep}.");
         }
 
-        var (snapshot, warning) = await ResolveSnapshotAsync(session, step, regenerate, cancellationToken);
-
         var prompt = await _promptComposer.ComposeAsync(
             step,
             session.InitialInput,
-            snapshot.Chunks,
             _styleCard,
             GetOutlineForPrompt(session, step),
             GetDraftForPrompt(session, step),
+            GetEditorialMemoForPrompt(session, step),
             cancellationToken);
 
-        var draft = step == WorkflowStep.Step1_Outline
-            ? await GenerateOutlineWithRecoveryAsync(prompt, cancellationToken)
-            : await _llmClient.GenerateAsync(prompt, cancellationToken, null);
+        string content;
+        string model;
+        DateTimeOffset generatedAt;
+        IReadOnlyList<string> openQuestions = Array.Empty<string>();
+        string? editorialMemoJson = null;
 
-        var content = ApplyGeneratedContent(session, step, draft.Content);
+        if (step == WorkflowStep.Step1_Outline)
+        {
+            var outline = await GenerateOutlineWithRecoveryAsync(session.InitialInput, prompt, cancellationToken);
+            content = ApplyGeneratedContent(session, step, outline.Content);
+            session.EditorialMemoJson = outline.EditorialMemoJson;
+            editorialMemoJson = session.EditorialMemoJson;
+            openQuestions = outline.OpenQuestions;
+            model = outline.Model;
+            generatedAt = outline.GeneratedAt;
+        }
+        else
+        {
+            var draft = await _llmClient.GenerateAsync(prompt, cancellationToken, null);
+            var parsed = GeneratedContentParser.ParseDraft(draft.Content);
+            if (!parsed.IsValid)
+            {
+                var initialDraft = draft;
+                draft = await _llmClient.GenerateAsync(
+                    _promptComposer.ComposeDraftRepair(
+                        session.InitialInput,
+                        _styleCard,
+                        draft.Content,
+                        parsed.ErrorMessage ?? "下書き生成結果を解釈できませんでした。",
+                        session.OutlineConfirmed,
+                        session.EditorialMemoJson),
+                    cancellationToken,
+                    null);
+                parsed = GeneratedContentParser.ParseDraft(draft.Content);
+                if (!parsed.IsValid
+                    && GeneratedContentParser.TryRecoverMarkdownDraft(draft.Content, out var recovered))
+                {
+                    parsed = recovered;
+                }
+                else if (!parsed.IsValid
+                    && GeneratedContentParser.TryRecoverMarkdownDraft(initialDraft.Content, out recovered))
+                {
+                    draft = initialDraft;
+                    parsed = recovered;
+                }
+            }
+
+            EnsureValidDraftGeneration(parsed);
+            content = ApplyGeneratedContent(session, step, parsed.Draft);
+            session.OpenQuestions = parsed.OpenQuestions.ToList();
+            openQuestions = session.OpenQuestions;
+            model = draft.Model;
+            generatedAt = draft.GeneratedAt;
+        }
+
         session.Touch(_options.SessionRetentionDays);
         await _repository.UpdateSessionAsync(session, cancellationToken);
 
-        warning = content.Trim().Length < 50
-            ? "生成結果が短すぎます。入力内容を詳しくするか、設定を確認してください"
-            : warning;
+        var warning = string.IsNullOrWhiteSpace(content) ? BrokenOutputWarning : null;
 
         _logger.LogInformation("Workflow step generated. SessionId={SessionId} Step={Step}", sessionId, step);
 
         return new WorkflowGenerateResult(
             content,
-            snapshot.ChunkCount,
-            draft.Model,
-            draft.GeneratedAt,
-            warning);
+            RagHitCount: 0,
+            model,
+            generatedAt,
+            warning,
+            openQuestions,
+            editorialMemoJson);
     }
 
     public async Task<WorkflowPreviewResult> PreviewStepAsync(string sessionId, WorkflowStep step, CancellationToken cancellationToken)
@@ -196,20 +244,18 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
             throw new InvalidStateTransitionException($"Cannot preview step {step} from {session.CurrentStep}.");
         }
 
-        var (snapshot, warning) = await ResolveSnapshotAsync(session, step, regenerate: false, cancellationToken);
-
         var prompt = await _promptComposer.ComposeAsync(
             step,
             session.InitialInput,
-            snapshot.Chunks,
             _styleCard,
             GetOutlineForPrompt(session, step),
             GetDraftForPrompt(session, step),
+            GetEditorialMemoForPrompt(session, step),
             cancellationToken);
 
         _logger.LogInformation("Workflow prompt preview generated. SessionId={SessionId} Step={Step}", sessionId, step);
 
-        return new WorkflowPreviewResult(prompt.FullPrompt, snapshot.ChunkCount, warning, snapshot.SnapshotId);
+        return new WorkflowPreviewResult(prompt.FullPrompt, RagHitCount: 0, Warning: null, RagSnapshotId: null);
     }
 
     public async Task SaveStepAsync(string sessionId, WorkflowStep step, string editedContent, CancellationToken cancellationToken)
@@ -235,38 +281,6 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
         _logger.LogInformation("Workflow step confirmed. SessionId={SessionId} Step={Step}", sessionId, step);
 
         return new WorkflowConfirmResult(step, nextStep);
-    }
-
-    private async Task<(RagSnapshot Snapshot, string? Warning)> ResolveSnapshotAsync(
-        WorkflowSession session,
-        WorkflowStep step,
-        bool regenerate,
-        CancellationToken cancellationToken)
-    {
-        if (step == WorkflowStep.Step1_Outline && (regenerate || string.IsNullOrWhiteSpace(session.RagSnapshotId)))
-        {
-            var retrieval = await _retrievalService.RetrieveAsync(session.InitialInput.Content, cancellationToken);
-            var snapshot = new RagSnapshot
-            {
-                SnapshotId = Guid.NewGuid().ToString(),
-                SearchQuery = session.InitialInput.Content,
-                SearchExecutedAt = DateTimeOffset.UtcNow,
-                Chunks = retrieval.Chunks.ToList(),
-                ChunkCount = retrieval.Chunks.Count,
-            };
-
-            await _repository.UpsertSnapshotAsync(snapshot, cancellationToken);
-            session.RagSnapshotId = snapshot.SnapshotId;
-            return (snapshot, retrieval.Warning);
-        }
-
-        if (!string.IsNullOrWhiteSpace(session.RagSnapshotId))
-        {
-            var snapshot = await _repository.GetSnapshotAsync(session.RagSnapshotId, cancellationToken);
-            return (snapshot, null);
-        }
-
-        throw new InvalidStateTransitionException("RAG snapshot is not available for this step.");
     }
 
     private string ApplyGeneratedContent(WorkflowSession session, WorkflowStep step, string content)
@@ -357,28 +371,94 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
             : null;
     }
 
-    private async Task<Draft> GenerateOutlineWithRecoveryAsync(Prompt prompt, CancellationToken cancellationToken)
+    private static string? GetEditorialMemoForPrompt(WorkflowSession session, WorkflowStep step)
     {
-        var generated = await _llmClient.GenerateAsync(prompt, cancellationToken, _options.OutlineMaxOutputTokens);
-        var normalized = NormalizeGeneratedOutline(generated.Content);
+        return step == WorkflowStep.Step2_Draft
+            ? session.EditorialMemoJson
+            : null;
+    }
 
-        if (TryValidateGeneratedOutline(normalized, out var validationMessage))
+    private async Task<OutlineGenerationOutcome> GenerateOutlineWithRecoveryAsync(
+        BlogOverview overview,
+        Prompt prompt,
+        CancellationToken cancellationToken)
+    {
+        var maxTokens = _options.OutlineMaxOutputTokens is > 0
+            ? _options.OutlineMaxOutputTokens
+            : null;
+
+        var generated = await _llmClient.GenerateAsync(prompt, cancellationToken, maxTokens);
+        var parsed = GeneratedContentParser.ParseOutline(generated.Content);
+        var normalized = NormalizeGeneratedOutline(parsed.Outline);
+        string? validationMessage = null;
+
+        if (!parsed.IsMalformedJson && TryValidateGeneratedOutline(normalized, out validationMessage))
         {
-            return CloneDraft(generated, normalized);
+            return ToOutlineOutcome(generated, normalized, parsed);
         }
 
-        _logger.LogWarning("Generated outline failed validation. Attempting repair. Reason={Reason}", validationMessage);
+        var initialValidationMessage = parsed.IsMalformedJson
+            ? "アウトライン生成結果のJSONが壊れています。"
+            : validationMessage ?? "アウトラインの形式が不正です。";
 
-        var repaired = await _llmClient.GenerateAsync(
-            BuildOutlineRepairPrompt(generated.Content, validationMessage ?? "unknown"),
-            cancellationToken,
-            _options.OutlineMaxOutputTokens);
+        _logger.LogWarning("Generated outline failed validation. Attempting repair. Reason={Reason}", initialValidationMessage);
 
-        var normalizedRepaired = NormalizeGeneratedOutline(repaired.Content);
-        _outlineValidator.ValidateOrThrow(normalizedRepaired, _options, OutlineViolationSource.LlmGenerated);
+        var repairSource = generated;
+        var repairMessage = initialValidationMessage;
+        const int maxFormatRepairAttempts = 2;
+        for (var attempt = 0; attempt < maxFormatRepairAttempts; attempt++)
+        {
+            var repaired = await _llmClient.GenerateAsync(
+                _promptComposer.ComposeOutlineRepair(
+                    overview,
+                    _styleCard,
+                    repairSource.Content,
+                    repairMessage,
+                    _options),
+                cancellationToken,
+                maxTokens);
 
-        return CloneDraft(repaired, normalizedRepaired);
+            var repairedParsed = GeneratedContentParser.ParseOutline(repaired.Content);
+            var normalizedRepaired = NormalizeGeneratedOutline(repairedParsed.Outline);
+            if (!repairedParsed.IsMalformedJson)
+            {
+                _outlineValidator.ValidateOrThrow(normalizedRepaired, _options, OutlineViolationSource.LlmGenerated);
+                return ToOutlineOutcome(repaired, normalizedRepaired, repairedParsed);
+            }
+
+            repairSource = repaired;
+            repairMessage = "アウトライン再整形結果のJSONも壊れています。JSON形式だけを修復してください。";
+        }
+
+        throw new LlmException(
+            "LLM_OUTPUT_INVALID",
+            "アウトライン生成結果のJSONを解釈できませんでした。",
+            isRetryable: true);
     }
+
+    private static OutlineGenerationOutcome ToOutlineOutcome(Draft source, string outline, OutlineParseResult parsed)
+    {
+        var memoJson = GeneratedContentParser.SerializeEditorialMemo(parsed.EditorialMemo);
+        var openQuestions = parsed.EditorialMemo?.OpenQuestions
+            ?.Where(x => !string.IsNullOrWhiteSpace(x))
+            .Select(x => x.Trim())
+            .ToList()
+            ?? new List<string>();
+
+        return new OutlineGenerationOutcome(
+            outline,
+            source.Model,
+            source.GeneratedAt,
+            memoJson,
+            openQuestions);
+    }
+
+    private sealed record OutlineGenerationOutcome(
+        string Content,
+        string Model,
+        DateTimeOffset GeneratedAt,
+        string? EditorialMemoJson,
+        IReadOnlyList<string> OpenQuestions);
 
     private bool TryValidateGeneratedOutline(string content, out string? validationMessage)
     {
@@ -395,52 +475,6 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
         }
     }
 
-    private static Draft CloneDraft(Draft source, string content)
-    {
-        return new Draft
-        {
-            Content = content,
-            Model = source.Model,
-            GeneratedAt = source.GeneratedAt,
-            TokensUsed = source.TokensUsed,
-        };
-    }
-
-    private Prompt BuildOutlineRepairPrompt(string rawContent, string validationMessage)
-    {
-        return new Prompt
-        {
-            SystemMessage = string.Join("\n", new[]
-            {
-                "あなたはMarkdownアウトライン整形専用アシスタントです。",
-                "出力はブログ記事のアウトライン本文だけに限定してください。",
-                "説明文、前置き、後書き、コードフェンスは出力しないでください。",
-            }),
-            UserOverview = string.Join("\n", new[]
-            {
-                "## アウトライン再整形",
-                string.Empty,
-                "次のLLM出力を、制約を満たすアウトラインに整形してください。",
-                "意味と順序はできるだけ維持し、余分な説明行は捨ててください。",
-                string.Empty,
-                "[制約]",
-                "- 出力は `- ` で始まる箇条書きのみ",
-                $"- 行数は {_options.OutlineMinLines}〜{_options.OutlineMaxLines} 行",
-                $"- 階層は最大 {_options.OutlineMaxDepth}（2スペースインデント）",
-                $"- 1行は {_options.OutlineMaxLineLength} 文字以内",
-                $"- 総文字数は {_options.OutlineMaxTotalChars} 文字以内",
-                "- 項目が多すぎる場合は近い内容を統合して収める",
-                "- 説明、注釈、ラベル、コードフェンスは禁止",
-                string.Empty,
-                "[直前の検証エラー]",
-                validationMessage,
-                string.Empty,
-                "[整形対象]",
-                rawContent,
-            }),
-        };
-    }
-
     private string NormalizeGeneratedOutline(string content)
     {
         var normalized = (content ?? string.Empty).Replace("\r\n", "\n", StringComparison.Ordinal).Trim();
@@ -449,52 +483,44 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
             return string.Empty;
         }
 
-        var codeFenceContent = ExtractCodeFenceContent(normalized);
-        if (!string.IsNullOrWhiteSpace(codeFenceContent))
-        {
-            normalized = codeFenceContent;
-        }
-
         var normalizedLines = new List<string>();
+        var hasUnrecognizedContent = false;
         foreach (var rawLine in normalized.Split('\n'))
         {
+            if (IsKnownOutlineFormattingLine(rawLine))
+            {
+                continue;
+            }
+
             if (TryNormalizeOutlineLine(rawLine, out var normalizedLine))
             {
                 normalizedLines.Add(normalizedLine!);
+                continue;
+            }
+
+            if (!string.IsNullOrWhiteSpace(rawLine))
+            {
+                hasUnrecognizedContent = true;
             }
         }
 
-        return normalizedLines.Count >= _options.OutlineMinLines
+        return !hasUnrecognizedContent && normalizedLines.Count >= _options.OutlineMinLines
             ? string.Join("\n", normalizedLines)
             : normalized;
     }
 
-    private string? ExtractCodeFenceContent(string content)
+    private static bool IsKnownOutlineFormattingLine(string rawLine)
     {
-        var lines = content.Split('\n');
-        var insideFence = false;
-        var buffer = new List<string>();
-
-        foreach (var line in lines)
+        var trimmed = rawLine.Trim();
+        if (trimmed.StartsWith("```", StringComparison.Ordinal)
+            || string.Equals(trimmed, "---", StringComparison.Ordinal))
         {
-            if (line.TrimStart().StartsWith("```", StringComparison.Ordinal))
-            {
-                if (insideFence)
-                {
-                    break;
-                }
-
-                insideFence = true;
-                continue;
-            }
-
-            if (insideFence)
-            {
-                buffer.Add(line);
-            }
+            return true;
         }
 
-        return buffer.Count == 0 ? null : string.Join("\n", buffer).Trim();
+        return trimmed.StartsWith("以下のアウトライン", StringComparison.Ordinal)
+            || trimmed.StartsWith("アウトライン:", StringComparison.Ordinal)
+            || trimmed.StartsWith("アウトライン：", StringComparison.Ordinal);
     }
 
     private bool TryNormalizeOutlineLine(string rawLine, out string? normalizedLine)
@@ -629,15 +655,23 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
             throw new ArgumentException("下書きを入力してください", nameof(content));
         }
 
-        if (content.Length < MinDraftLength)
-        {
-            throw new ArgumentException($"下書きは {MinDraftLength} 文字以上入力してください", nameof(content));
-        }
-
         if (content.Length > MaxDraftLength)
         {
             throw new ArgumentException($"下書きは {MaxDraftLength} 文字以内で入力してください", nameof(content));
         }
+    }
+
+    private static void EnsureValidDraftGeneration(DraftParseResult parsed)
+    {
+        if (parsed.IsValid)
+        {
+            return;
+        }
+
+        throw new LlmException(
+            "LLM_OUTPUT_INVALID",
+            parsed.ErrorMessage ?? "下書き生成結果を解釈できませんでした。",
+            isRetryable: true);
     }
 
     private static List<TitleHook> ParseTitleHookOptions(string content)

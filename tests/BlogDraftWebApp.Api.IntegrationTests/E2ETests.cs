@@ -15,28 +15,12 @@ public sealed class E2ETests
         await using var factory = new TestWebApplicationFactory();
 
         var overview = "This is a test overview (>=10 chars).";
-        var chunks = new List<RAGChunk>
-        {
-            new()
-            {
-                Text = "chunk1",
-                Score = 0.9,
-                SourceTitle = "t1",
-                SourceUrl = "https://example.com/1",
-            },
-        };
-
-        factory.RetrievalServiceMock
-            .Setup(x => x.RetrieveAsync(overview, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new RetrievalResult(chunks, null));
 
         factory.LlmClientMock
             .Setup(x => x.GenerateAsync(It.IsAny<Prompt>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new Draft
             {
-                Content = "# Title\n\nThis is a generated draft used for integration testing. " +
-                          "It must be sufficiently long so the server does not add the short-output warning message. " +
-                          "Additional filler text to exceed 100 characters.",
+                Content = "{\"draft\":\"# Title\\n\\nThis is a generated draft used for integration testing.\",\"openQuestions\":[]}",
                 Model = "test-model",
                 GeneratedAt = DateTimeOffset.UtcNow,
                 TokensUsed = 123,
@@ -50,12 +34,15 @@ public sealed class E2ETests
         var payload = await response.Content.ReadFromJsonAsync<GenerateDraftResponse>();
         Assert.That(payload, Is.Not.Null);
         Assert.That(payload!.Draft, Does.Contain("generated draft"));
-        Assert.That(payload.RagHitCount, Is.EqualTo(1));
+        Assert.That(payload.RagHitCount, Is.EqualTo(0));
         Assert.That(payload.Warning, Is.Null);
 
         factory.LlmClientMock.Verify(
             x => x.GenerateAsync(It.IsAny<Prompt>(), It.IsAny<CancellationToken>()),
             Times.Once);
+        factory.RetrievalServiceMock.Verify(
+            x => x.RetrieveAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            Times.Never);
     }
 
     [Test]
@@ -64,9 +51,6 @@ public sealed class E2ETests
         await using var factory = new TestWebApplicationFactory();
 
         var overview = "This is a test overview (>=10 chars).";
-        factory.RetrievalServiceMock
-            .Setup(x => x.RetrieveAsync(overview, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new RetrievalResult(Array.Empty<RAGChunk>(), null));
 
         factory.LlmClientMock
             .Setup(x => x.GenerateAsync(It.IsAny<Prompt>(), It.IsAny<CancellationToken>()))
@@ -80,6 +64,7 @@ public sealed class E2ETests
         var payload = await response.Content.ReadFromJsonAsync<PreviewPromptResponse>();
         Assert.That(payload, Is.Not.Null);
         Assert.That(payload!.Prompt, Does.Contain("[システムプロンプト]"));
+        Assert.That(payload.Prompt, Does.Contain("[編集方針: 入力保持・限定補足]"));
         Assert.That(payload.RagHitCount, Is.EqualTo(0));
 
         factory.LlmClientMock.Verify(
@@ -113,5 +98,25 @@ public sealed class E2ETests
         Assert.That(payload, Is.Not.Null);
         Assert.That(payload!.ErrorCode, Is.EqualTo("CONFIG_ERROR"));
         Assert.That(payload.IsRetryable, Is.False);
+    }
+
+    [Test]
+    public async Task Draft_RemainsAvailable_WhenOnlyRagConfigurationIsIncomplete()
+    {
+        await using var factory = new TestWebApplicationFactory(invalidRagConfiguration: true);
+        factory.LlmClientMock
+            .Setup(x => x.GenerateAsync(It.IsAny<Prompt>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Draft
+            {
+                Content = "{\"draft\":\"短い本文\",\"openQuestions\":[]}",
+                Model = "test-model",
+                GeneratedAt = DateTimeOffset.UtcNow,
+            });
+
+        using var http = factory.CreateClient();
+
+        var response = await http.PostAsJsonAsync("/draft", new GenerateDraftRequest { Overview = "短い" });
+
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
     }
 }

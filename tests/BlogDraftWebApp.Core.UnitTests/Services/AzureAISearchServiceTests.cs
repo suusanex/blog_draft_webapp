@@ -20,6 +20,7 @@ public sealed class AzureAISearchServiceTests
             ApiKey = "x",
             IndexName = "idx",
             TextFieldName = "content",
+            VectorFieldName = "vector",
             TopK = 10,
             MinimumScore = 0.7,
         });
@@ -57,6 +58,7 @@ public sealed class AzureAISearchServiceTests
             ApiKey = "x",
             IndexName = "idx",
             TextFieldName = "content",
+            VectorFieldName = "vector",
         });
 
         var mockClient = new Mock<IAzureSearchClient>(MockBehavior.Strict);
@@ -70,5 +72,25 @@ public sealed class AzureAISearchServiceTests
         var service = new AzureAISearchService(NullLogger<AzureAISearchService>.Instance, options, mockFactory.Object);
 
         Assert.That(async () => await service.RetrieveAsync("query", CancellationToken.None), Throws.InstanceOf<RagException>());
+    }
+
+    [Test]
+    public void RetrieveAsync_有効化されたRAG設定が不足していれば明示的な設定エラーにする()
+    {
+        var options = Options.Create(new RagOptions
+        {
+            Enabled = true,
+            Endpoint = "https://example.search.windows.net",
+            ApiKey = "x",
+            IndexName = "idx",
+            TextFieldName = "content",
+        });
+        var mockFactory = new Mock<IAzureSearchClientFactory>(MockBehavior.Strict);
+        var service = new AzureAISearchService(NullLogger<AzureAISearchService>.Instance, options, mockFactory.Object);
+
+        Assert.That(
+            async () => await service.RetrieveAsync("query", CancellationToken.None),
+            Throws.InstanceOf<ConfigurationException>());
+        mockFactory.Verify(x => x.CreateClient(It.IsAny<RagOptions>()), Times.Never);
     }
 }

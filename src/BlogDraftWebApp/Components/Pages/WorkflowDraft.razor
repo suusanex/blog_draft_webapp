@@ -57,14 +57,6 @@ else
         </button>
     </div>
 
-    @if (_refreshDiff is not null)
-    {
-        <div class="alert alert-info">
-            <div>RAG差分: +@_refreshDiff.AddedChunkCount / -@_refreshDiff.RemovedChunkCount (rate=@_refreshDiff.ChangeRate)</div>
-            <button class="btn btn-sm btn-primary mt-2" @onclick="ConfirmRagRefreshAsync">この差分を採用</button>
-        </div>
-    }
-
     <!-- Edit Area -->
     <div class="mb-4">
         <label class="form-label">下書き</label>
@@ -74,6 +66,20 @@ else
             <small class="text-muted">@_autoSaveMessage</small>
         }
     </div>
+
+    @if (_openQuestions.Count > 0)
+    {
+        <div class="alert alert-info mb-4">
+            <h2 class="h5">要確認事項</h2>
+            <p class="mb-2">本文には混ぜていません。結論を左右する場合は入力やアウトラインを見直してください。</p>
+            <ul class="mb-0">
+                @foreach (var question in _openQuestions)
+                {
+                    <li>@question</li>
+                }
+            </ul>
+        </div>
+    }
 
     <!-- Confirm and Next -->
     @if (_currentStep is "Step2_Draft")
@@ -97,7 +103,6 @@ else
         <summary class="btn btn-link">▼ 詳細オプション</summary>
         <div class="mt-3 d-flex flex-column gap-2">
             <button class="btn btn-outline-secondary" @onclick="PreviewDraftAsync">プロンプトを確認</button>
-            <button class="btn btn-outline-warning" @onclick="RefreshRagAsync">RAG再検索</button>
             <button class="btn btn-outline-secondary" @onclick="() => SaveDraftAsync()">手動保存</button>
         </div>
     </details>
@@ -148,7 +153,7 @@ else
     private string _currentStep = "Step2_Draft";
     private string _draftContent = string.Empty;
     private string? _promptPreview;
-    private RefreshRagSnapshotResponse? _refreshDiff;
+    private List<string> _openQuestions = new();
     private string? _warning;
     private ErrorResponse? _error;
     private bool _isBusy;
@@ -208,6 +213,7 @@ else
                         ?? payload.DraftEdited
                         ?? payload.DraftGenerated
                         ?? string.Empty;
+                    _openQuestions = payload.OpenQuestions ?? new List<string>();
                     return;
                 }
             }
@@ -244,6 +250,7 @@ else
                 {
                     _draftContent = payload.Generated;
                     _warning = payload.Warning;
+                    _openQuestions = payload.OpenQuestions ?? new List<string>();
                     return;
                 }
             }
@@ -367,64 +374,6 @@ else
 
             _error = await response.Content.ReadFromJsonAsync<ErrorResponse>();
             _error ??= new ErrorResponse { Message = "確定に失敗しました", IsRetryable = false };
-        }
-        finally
-        {
-            _isBusy = false;
-        }
-    }
-
-    private async Task RefreshRagAsync()
-    {
-        if (string.IsNullOrWhiteSpace(SessionId))
-        {
-            return;
-        }
-
-        _isBusy = true;
-        _error = null;
-
-        try
-        {
-            var http = CreateHttpClient();
-            var response = await http.PostAsync($"/workflow/sessions/{SessionId}/rag/refresh", content: null);
-            if (response.StatusCode == HttpStatusCode.OK)
-            {
-                _refreshDiff = await response.Content.ReadFromJsonAsync<RefreshRagSnapshotResponse>();
-                return;
-            }
-
-            _error = await response.Content.ReadFromJsonAsync<ErrorResponse>();
-            _error ??= new ErrorResponse { Message = "RAG再検索に失敗しました", IsRetryable = false };
-        }
-        finally
-        {
-            _isBusy = false;
-        }
-    }
-
-    private async Task ConfirmRagRefreshAsync()
-    {
-        if (string.IsNullOrWhiteSpace(SessionId))
-        {
-            return;
-        }
-
-        _isBusy = true;
-        _error = null;
-
-        try
-        {
-            var http = CreateHttpClient();
-            var response = await http.PostAsync($"/workflow/sessions/{SessionId}/rag/refresh/confirm", content: null);
-            if (response.StatusCode == HttpStatusCode.OK)
-            {
-                _refreshDiff = null;
-                return;
-            }
-
-            _error = await response.Content.ReadFromJsonAsync<ErrorResponse>();
-            _error ??= new ErrorResponse { Message = "RAG再検索確定に失敗しました", IsRetryable = false };
         }
         finally
         {

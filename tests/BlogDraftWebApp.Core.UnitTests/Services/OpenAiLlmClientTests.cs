@@ -156,7 +156,7 @@ public sealed class OpenAiLlmClientTests
         });
 
         var client = new OpenAiLlmClient(httpClient, NullLogger<OpenAiLlmClient>.Instance, options);
-        var prompt = new Prompt { SystemMessage = "sys", UserOverview = "## アウトライン生成（厳格フォーマット）\n- rule" };
+        var prompt = new Prompt { SystemMessage = "sys", UserOverview = "## アウトラインと編集メモの生成\n- rule" };
 
         _ = await client.GenerateAsync(prompt, CancellationToken.None, maxOutputTokens: 350);
 
@@ -189,10 +189,47 @@ public sealed class OpenAiLlmClientTests
         });
 
         var client = new OpenAiLlmClient(httpClient, NullLogger<OpenAiLlmClient>.Instance, options);
-        var prompt = new Prompt { SystemMessage = "sys", UserOverview = "## アウトライン生成（厳格フォーマット）\n- rule" };
+        var prompt = new Prompt { SystemMessage = "sys", UserOverview = "## アウトラインと編集メモの生成\n- rule" };
 
         _ = await client.GenerateAsync(prompt, CancellationToken.None, maxOutputTokens: 350);
 
         Assert.That(hasTemperature, Is.False);
+    }
+
+    [Test]
+    public async Task GenerateAsync_JSON出力を要求するプロンプトでは厳密なJSONスキーマを送信する()
+    {
+        JsonElement responseFormat = default;
+
+        var handler = new StubHttpMessageHandler(async (request, _) =>
+        {
+            using var json = JsonDocument.Parse(await request.Content!.ReadAsStringAsync());
+            responseFormat = json.RootElement.GetProperty("response_format").Clone();
+            const string response = "{\"choices\":[{\"message\":{\"content\":\"{\\\"draft\\\":\\\"本文\\\",\\\"openQuestions\\\":[]}\"}}]}";
+            return StubHttpMessageHandler.Json(HttpStatusCode.OK, response);
+        });
+
+        var client = new OpenAiLlmClient(
+            new HttpClient(handler),
+            NullLogger<OpenAiLlmClient>.Instance,
+            Options.Create(new LlmOptions
+            {
+                ApiKey = "sk-test",
+                BaseUrl = "https://api.openai.com/v1",
+                Model = "gpt-5.6-sol",
+                RequestTimeoutSeconds = 30,
+            }));
+
+        _ = await client.GenerateAsync(
+            new Prompt { SystemMessage = "sys", UserOverview = "- JSON のみを返す" },
+            CancellationToken.None);
+
+        Assert.That(responseFormat.GetProperty("type").GetString(), Is.EqualTo("json_schema"));
+        Assert.That(responseFormat.GetProperty("json_schema").GetProperty("name").GetString(), Is.EqualTo("blog_draft_response"));
+        Assert.That(responseFormat.GetProperty("json_schema").GetProperty("strict").GetBoolean(), Is.True);
+        var schema = responseFormat.GetProperty("json_schema").GetProperty("schema");
+        Assert.That(schema.GetProperty("additionalProperties").GetBoolean(), Is.False);
+        Assert.That(schema.GetProperty("required")[0].GetString(), Is.EqualTo("draft"));
+        Assert.That(schema.GetProperty("required")[1].GetString(), Is.EqualTo("openQuestions"));
     }
 }

@@ -10,7 +10,6 @@ namespace BlogDraftWebApp.Api.Endpoints;
 
 public static class TitleHookEndpoints
 {
-    private const int MinArticleBodyLength = 100;
     private const int MaxArticleBodyLength = 50000;
 
     public static IEndpointRouteBuilder MapTitleHookEndpoints(this IEndpointRouteBuilder app)
@@ -82,18 +81,6 @@ public static class TitleHookEndpoints
                 ErrorCode = "INVALID_REQUEST",
                 Message = "本文を入力してください",
                 Details = env.IsDevelopment() ? "ArticleBody field is required" : null,
-                RequestId = httpContext.TraceIdentifier,
-                IsRetryable = false,
-            });
-        }
-
-        if (articleBody.Length < MinArticleBodyLength)
-        {
-            return Results.BadRequest(new ErrorResponse
-            {
-                ErrorCode = "INVALID_REQUEST",
-                Message = $"本文は {MinArticleBodyLength} 文字以上入力してください",
-                Details = env.IsDevelopment() ? $"ArticleBody must be at least {MinArticleBodyLength} characters" : null,
                 RequestId = httpContext.TraceIdentifier,
                 IsRetryable = false,
             });

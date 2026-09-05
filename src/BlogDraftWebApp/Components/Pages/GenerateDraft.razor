@@ -66,6 +66,20 @@
     <pre class="border p-3" style="white-space: pre-wrap;">@_promptPreview</pre>
 }
 
+@if (_openQuestions.Count > 0)
+{
+    <div class="alert alert-info mt-3">
+        <h2 class="h5">要確認事項</h2>
+        <p class="mb-2">本文には混ぜていません。結論を左右する場合は入力を補って再生成してください。</p>
+        <ul class="mb-0">
+            @foreach (var question in _openQuestions)
+            {
+                <li>@question</li>
+            }
+        </ul>
+    </div>
+}
+
 @if (!string.IsNullOrWhiteSpace(_draftMarkdown))
 {
     <div class="mt-4 d-flex gap-2">
@@ -87,7 +101,6 @@
     private sealed class GenerateDraftViewModel
     {
         [Required(ErrorMessage = "記事の概要を入力してください")]
-        [MinLength(10, ErrorMessage = "概要は 10 文字以上入力してください")]
         [MaxLength(5000, ErrorMessage = "概要は 5000 文字以内で入力してください")]
         public string Overview { get; set; } = string.Empty;
     }
@@ -104,6 +117,7 @@
     private string? _copyMessage;
     private string? _copyPromptMessage;
     private ErrorResponse? _error;
+    private List<string> _openQuestions = new();
 
     private void OnOverviewChanged(string value)
     {
@@ -123,6 +137,7 @@
         _draftMarkdown = null;
         _draftHtml = string.Empty;
         _promptPreview = null;
+        _openQuestions = new();
 
         try
         {
@@ -162,6 +177,7 @@
         _draftMarkdown = null;
         _draftHtml = string.Empty;
         _promptPreview = null;
+        _openQuestions = new();
 
         try
         {
@@ -174,6 +190,7 @@
                 var payload = await response.Content.ReadFromJsonAsync<GenerateDraftResponse>();
                 _draftMarkdown = payload?.Draft;
                 _warning = payload?.Warning;
+                _openQuestions = payload?.OpenQuestions ?? new List<string>();
 
                 if (!string.IsNullOrWhiteSpace(_draftMarkdown))
                 {

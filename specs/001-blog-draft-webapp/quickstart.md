@@ -74,9 +74,11 @@ dotnet user-secrets set "StyleCard:Content" "## 執筆方針`n- 読者に寄り�
 
 > **注意**: 文体カードは機微情報として扱うため、リポジトリにコミットしないこと。
 
-### 2.4 RAG の設定（オプション）
+### 2.4 Azure AI Search の設定（生成には未使用）
 
-RAG を使用する場合:
+下書き生成は Azure AI Search を使いません。互換 API や既存インデックスを残す場合のみ設定します。
+
+検索を使う旧 API を試す場合:
 
 ```powershell
 dotnet user-secrets set "AzureAISearch:Enabled" "true"
@@ -297,13 +299,13 @@ dotnet user-secrets set "OpenAI:ApiKey" "YOUR_API_KEY"
 dotnet user-secrets set "OpenAI:RequestTimeoutSeconds" "180"
 ```
 
-### 問題: 生成結果が短すぎる
+### 問題: 生成結果の形式が不正
 
-**原因**: ユーザー入力が不足している、または LLM のパラメータが不適切。
+**原因**: LLM が要求された JSON 形式で応答しなかった、または `draft` が空だった。
 
 **解決策**:
-1. 概要をより詳細に記入（目的、手順、想定読者など）。
-2. 最大トークン数を増やす:
+1. API の `LLM_OUTPUT_INVALID` と `isRetryable=true` を確認して再試行する。
+2. 応答が途中で切れる場合は最大トークン数を増やす:
    ```powershell
    dotnet user-secrets set "OpenAI:MaxTokens" "8192"
    ```
