@@ -1,7 +1,18 @@
 namespace BlogDraftWebApp.Core.Models;
 
+public enum PromptKind
+{
+    Unknown = 0,
+    OneShotDraft,
+    WorkflowOutline,
+    WorkflowDraft,
+    WorkflowTitleHook,
+    OutlineRepair,
+}
+
 public sealed class Prompt
 {
+    public PromptKind Kind { get; init; }
     public string SystemMessage { get; init; } = string.Empty;
     public string RagContext { get; init; } = string.Empty;
     public string UserOverview { get; init; } = string.Empty;

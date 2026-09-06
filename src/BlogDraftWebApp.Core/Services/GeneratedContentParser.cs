@@ -45,34 +45,10 @@ public static class GeneratedContentParser
     {
         if (TryReadDraftResponse(raw, out var draftContent, out var questions, out var failureMessage))
         {
-            for (var depth = 0; depth < 3; depth++)
-            {
-                if (!TryReadDraftResponse(draftContent, out var nestedDraft, out var nestedQuestions, out _))
-                {
-                    break;
-                }
-
-                draftContent = nestedDraft;
-                if (nestedQuestions.Count > 0)
-                {
-                    questions = nestedQuestions;
-                }
-            }
-
             return new DraftParseResult(
                 draftContent,
                 questions,
                 FromJson: true,
-                IsValid: true,
-                ErrorMessage: null);
-        }
-
-        if (TryRecoverEmbeddedDraft(raw, out var embeddedDraft, out var embeddedQuestions))
-        {
-            return new DraftParseResult(
-                embeddedDraft,
-                embeddedQuestions,
-                FromJson: false,
                 IsValid: true,
                 ErrorMessage: null);
         }
@@ -83,45 +59,6 @@ public static class GeneratedContentParser
             FromJson: false,
             IsValid: false,
             ErrorMessage: failureMessage ?? "LLM出力がJSON形式ではないか、draftが空です。");
-    }
-
-    public static bool TryRecoverMarkdownDraft(string raw, out DraftParseResult recovered)
-    {
-        recovered = new DraftParseResult(
-            Draft: string.Empty,
-            OpenQuestions: Array.Empty<string>(),
-            FromJson: false,
-            IsValid: false,
-            ErrorMessage: null);
-
-        if (string.IsNullOrWhiteSpace(raw))
-        {
-            return false;
-        }
-
-        var content = raw.Trim();
-        if (!LooksLikeMarkdownDraft(content))
-        {
-            return false;
-        }
-
-        if (content.StartsWith("```", StringComparison.Ordinal)
-            && content.EndsWith("```", StringComparison.Ordinal))
-        {
-            var firstLineEnd = content.IndexOf('\n');
-            if (firstLineEnd >= 0)
-            {
-                content = content[(firstLineEnd + 1)..].TrimEnd('`', '\r', '\n', ' ', '\t').Trim();
-            }
-        }
-
-        recovered = new DraftParseResult(
-            Draft: content,
-            OpenQuestions: Array.Empty<string>(),
-            FromJson: false,
-            IsValid: true,
-            ErrorMessage: null);
-        return true;
     }
 
     public static string? SerializeEditorialMemo(EditorialMemo? memo)
@@ -163,37 +100,30 @@ public static class GeneratedContentParser
         draft = string.Empty;
         openQuestions = new List<string>();
         failureMessage = null;
-        var json = ExtractJson(raw);
+        var json = ExtractStrictJson(raw);
         if (string.IsNullOrWhiteSpace(json))
         {
-            failureMessage = "JSON候補がありません。";
+            failureMessage = "JSON全体を入力してください。";
             return false;
         }
 
         try
         {
-            using var document = JsonDocument.Parse(json);
-            if (document.RootElement.ValueKind != JsonValueKind.Object
-                || !TryGetProperty(document.RootElement, "draft", out var draftProperty)
-                || draftProperty.ValueKind != JsonValueKind.String
-                || string.IsNullOrWhiteSpace(draftProperty.GetString()))
+            var parsed = JsonSerializer.Deserialize<DraftLlmResponse>(json, JsonOptions);
+            if (parsed is null
+                || string.IsNullOrWhiteSpace(parsed.Draft)
+                || parsed.OpenQuestions is null
+                || parsed.OpenQuestions.Any(question => question is null))
             {
-                failureMessage = "JSONのdraftフィールドが文字列ではないか、空です。";
+                failureMessage = "JSONに空でないdraftとopenQuestions配列が必要です。";
                 return false;
             }
 
-            draft = draftProperty.GetString()!.Trim();
-            if (TryGetProperty(document.RootElement, "openQuestions", out var questionsProperty)
-                && questionsProperty.ValueKind == JsonValueKind.Array)
-            {
-                foreach (var item in questionsProperty.EnumerateArray())
-                {
-                    if (item.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(item.GetString()))
-                    {
-                        openQuestions.Add(item.GetString()!.Trim());
-                    }
-                }
-            }
+            draft = parsed.Draft.Trim();
+            openQuestions = parsed.OpenQuestions
+                .Where(question => !string.IsNullOrWhiteSpace(question))
+                .Select(question => question!.Trim())
+                .ToList();
 
             return true;
         }
@@ -202,120 +132,6 @@ public static class GeneratedContentParser
             failureMessage = "JSON構文が不正です。";
             return false;
         }
-    }
-
-    private static bool TryRecoverEmbeddedDraft(
-        string? raw,
-        out string draft,
-        out List<string> openQuestions)
-    {
-        draft = string.Empty;
-        openQuestions = new List<string>();
-        var candidate = ExtractDraftString(raw);
-        if (string.IsNullOrWhiteSpace(candidate))
-        {
-            return false;
-        }
-
-        for (var depth = 0; depth < 3; depth++)
-        {
-            if (!TryReadDraftResponse(candidate, out var nestedDraft, out var nestedQuestions, out _))
-            {
-                break;
-            }
-
-            candidate = nestedDraft;
-            if (nestedQuestions.Count > 0)
-            {
-                openQuestions = nestedQuestions;
-            }
-        }
-
-        if (!LooksLikeMarkdownDraft(candidate))
-        {
-            return false;
-        }
-
-        draft = candidate;
-        return true;
-    }
-
-    private static string? ExtractDraftString(string? raw)
-    {
-        if (string.IsNullOrWhiteSpace(raw))
-        {
-            return null;
-        }
-
-        var searchStart = 0;
-        while (searchStart < raw.Length)
-        {
-            var propertyIndex = raw.IndexOf("\"draft\"", searchStart, StringComparison.OrdinalIgnoreCase);
-            if (propertyIndex < 0)
-            {
-                return null;
-            }
-
-            var colonIndex = raw.IndexOf(':', propertyIndex + 7);
-            if (colonIndex < 0)
-            {
-                return null;
-            }
-
-            var valueStart = colonIndex + 1;
-            while (valueStart < raw.Length && char.IsWhiteSpace(raw[valueStart]))
-            {
-                valueStart++;
-            }
-
-            if (valueStart < raw.Length && raw[valueStart] == '\"')
-            {
-                var valueEnd = valueStart + 1;
-                while (valueEnd < raw.Length)
-                {
-                    if (raw[valueEnd] == '\\')
-                    {
-                        valueEnd += 2;
-                        continue;
-                    }
-
-                    if (raw[valueEnd] == '\"')
-                    {
-                        var jsonString = raw[valueStart..(valueEnd + 1)];
-                        try
-                        {
-                            return JsonSerializer.Deserialize<string>(jsonString, JsonOptions);
-                        }
-                        catch (JsonException)
-                        {
-                            searchStart = valueEnd + 1;
-                            break;
-                        }
-                    }
-
-                    valueEnd++;
-                }
-            }
-
-            searchStart = propertyIndex + 7;
-        }
-
-        return null;
-    }
-
-    private static bool TryGetProperty(JsonElement element, string propertyName, out JsonElement value)
-    {
-        foreach (var property in element.EnumerateObject())
-        {
-            if (string.Equals(property.Name, propertyName, StringComparison.OrdinalIgnoreCase))
-            {
-                value = property.Value;
-                return true;
-            }
-        }
-
-        value = default;
-        return false;
     }
 
     private static string? ExtractJson(string? raw)
@@ -352,6 +168,32 @@ public static class GeneratedContentParser
         return trimmed[firstBrace..(lastBrace + 1)];
     }
 
+    private static string? ExtractStrictJson(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return null;
+        }
+
+        var trimmed = raw.Trim();
+        if (trimmed.StartsWith("```", StringComparison.Ordinal)
+            && trimmed.EndsWith("```", StringComparison.Ordinal))
+        {
+            var firstLineEnd = trimmed.IndexOf('\n');
+            if (firstLineEnd < 0)
+            {
+                return null;
+            }
+
+            trimmed = trimmed[(firstLineEnd + 1)..^3].Trim();
+        }
+
+        return trimmed.StartsWith("{", StringComparison.Ordinal)
+            && trimmed.EndsWith("}", StringComparison.Ordinal)
+            ? trimmed
+            : null;
+    }
+
     private static bool LooksLikeJsonResponse(string? raw)
     {
         if (string.IsNullOrWhiteSpace(raw))
@@ -365,25 +207,16 @@ public static class GeneratedContentParser
             || trimmed.StartsWith("```json", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static bool LooksLikeMarkdownDraft(string content)
-    {
-        if (LooksLikeJsonResponse(content))
-        {
-            return false;
-        }
-
-        return content.Length >= 40
-            || content.StartsWith("#", StringComparison.Ordinal)
-            || content.Contains("\n#", StringComparison.Ordinal)
-            || content.Contains("\n- ", StringComparison.Ordinal)
-            || content.Contains("https://", StringComparison.Ordinal)
-            || content.Contains("```", StringComparison.Ordinal);
-    }
-
     private sealed class OutlineLlmResponse
     {
         public string? Outline { get; set; }
         public EditorialMemo? EditorialMemo { get; set; }
+    }
+
+    private sealed class DraftLlmResponse
+    {
+        public string? Draft { get; set; }
+        public List<string?>? OpenQuestions { get; set; }
     }
 
 }

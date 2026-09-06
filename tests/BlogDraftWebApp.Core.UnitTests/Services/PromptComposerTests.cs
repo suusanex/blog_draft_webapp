@@ -29,6 +29,7 @@ public sealed class PromptComposerTests
         Assert.That(prompt.SystemMessage, Does.Contain(TestStyleCard.Content));
 
         Assert.That(prompt.RagContext, Is.EqualTo(string.Empty));
+        Assert.That(prompt.Kind, Is.EqualTo(PromptKind.OneShotDraft));
         Assert.That(prompt.UserOverview, Does.Contain(PromptComposer.OneShotHeading));
         Assert.That(prompt.UserOverview, Does.Contain(PromptComposer.AuthorInputHeading));
         Assert.That(prompt.UserOverview, Does.Contain(overview.Content));
@@ -53,6 +54,7 @@ public sealed class PromptComposerTests
             CancellationToken.None);
 
         Assert.That(prompt.UserOverview, Does.Contain(PromptComposer.DraftHeading));
+        Assert.That(prompt.Kind, Is.EqualTo(PromptKind.WorkflowDraft));
         Assert.That(prompt.UserOverview, Does.Contain("確定アウトライン"));
         Assert.That(prompt.UserOverview, Does.Contain("- 使い方"));
         Assert.That(prompt.UserOverview, Does.Contain("編集メモ"));
@@ -98,6 +100,7 @@ public sealed class PromptComposerTests
             CancellationToken.None);
 
         Assert.That(prompt.UserOverview, Does.Contain("タイトルと導入部生成"));
+        Assert.That(prompt.Kind, Is.EqualTo(PromptKind.WorkflowTitleHook));
         Assert.That(prompt.UserOverview, Does.Contain("確定下書き"));
         Assert.That(prompt.UserOverview, Does.Contain("本文"));
         Assert.That(prompt.UserOverview, Does.Contain("新たな主張を足さない"));
@@ -119,6 +122,7 @@ public sealed class PromptComposerTests
             CancellationToken.None);
 
         Assert.That(prompt.UserOverview, Does.Contain(PromptComposer.OutlineHeading));
+        Assert.That(prompt.Kind, Is.EqualTo(PromptKind.WorkflowOutline));
         Assert.That(prompt.UserOverview, Does.Contain("editorialMemo"));
         Assert.That(prompt.UserOverview, Does.Contain("階層は最大 2"));
         Assert.That(prompt.UserOverview, Does.Contain("禁止: `#`見出し"));
@@ -140,6 +144,7 @@ public sealed class PromptComposerTests
 
         Assert.That(prompt.RagContext, Is.EqualTo(string.Empty));
         Assert.That(prompt.UserOverview, Does.Contain("タイトル案と冒頭段落案の生成"));
+        Assert.That(prompt.Kind, Is.EqualTo(PromptKind.WorkflowTitleHook));
         Assert.That(prompt.UserOverview, Does.Contain("入力本文"));
         Assert.That(prompt.UserOverview, Does.Contain("完成した本文"));
         Assert.That(prompt.UserOverview, Does.Contain("本文に書かれていない効能"));
@@ -161,6 +166,7 @@ public sealed class PromptComposerTests
             options);
 
         Assert.That(prompt.UserOverview, Does.Contain(PromptComposer.OutlineRepairHeading));
+        Assert.That(prompt.Kind, Is.EqualTo(PromptKind.OutlineRepair));
         Assert.That(prompt.UserOverview, Does.Contain("壊れた出力"));
         Assert.That(prompt.UserOverview, Does.Contain("アウトラインを入力してください"));
         Assert.That(prompt.UserOverview, Does.Contain("残すべき具体例"));
@@ -184,6 +190,7 @@ public sealed class PromptComposerTests
             "{\"meaningElements\":[]}");
 
         Assert.That(prompt.UserOverview, Does.Contain("JSON再整形"));
+        Assert.That(prompt.Kind, Is.EqualTo(PromptKind.OneShotDraft));
         Assert.That(prompt.UserOverview, Does.Contain("壊れた本文JSON"));
         Assert.That(prompt.UserOverview, Does.Contain("LLM出力がJSON形式ではありません。"));
         Assert.That(prompt.UserOverview, Does.Contain(overview.Content));

@@ -10,5 +10,6 @@ public sealed class LlmOptions
     public string Model { get; set; } = string.Empty;
     public int MaxTokens { get; set; } = 4096;
     public int RequestTimeoutSeconds { get; set; } = 60;
+    public bool UseStructuredJsonSchema { get; set; } = true;
     public Dictionary<string, string> Parameters { get; set; } = new();
 }

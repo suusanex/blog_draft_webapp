@@ -26,6 +26,11 @@ public sealed class LlmErrorClassifier
                 return new LlmErrorInfo("LLM_OUTPUT_INVALID", "生成結果の形式が不正です。もう一度お試しください", llmException.IsRetryable, 502);
             }
 
+            if (string.Equals(llmException.ErrorCode, "LLM_OUTPUT_TRUNCATED", StringComparison.Ordinal))
+            {
+                return new LlmErrorInfo("LLM_OUTPUT_TRUNCATED", "生成結果が出力上限で途中終了しました。もう一度お試しください", llmException.IsRetryable, 502);
+            }
+
             return new LlmErrorInfo("LLM_ERROR", "LLM サービスでエラーが発生しました", llmException.IsRetryable, 502);
         }
 
