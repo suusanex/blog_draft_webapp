@@ -276,7 +276,7 @@ public sealed class WorkflowOrchestratorTests
             .SetupSequence(x => x.GenerateAsync(It.IsAny<Prompt>(), It.IsAny<CancellationToken>(), It.IsAny<int?>()))
             .ReturnsAsync(new Draft
             {
-                Content = "- 残すべき項目\nこの説明も保持対象",
+                Content = "- 残すべき項目\n    - 深すぎる項目\nこの説明も保持対象",
                 Model = "m1",
                 GeneratedAt = DateTimeOffset.UtcNow,
             })
@@ -291,6 +291,7 @@ public sealed class WorkflowOrchestratorTests
 
         Assert.That(result.Content, Is.EqualTo("- 残すべき項目"));
         Assert.That(repairInput, Does.Contain("- 残すべき項目"));
+        Assert.That(repairInput, Does.Contain("    - 深すぎる項目"));
         Assert.That(repairInput, Does.Contain("この説明も保持対象"));
     }
 

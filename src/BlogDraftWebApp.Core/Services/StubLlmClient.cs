@@ -25,8 +25,7 @@ public sealed class StubLlmClient : ILlmClient
 
     private static string BuildContent(Prompt prompt)
     {
-        if (prompt.UserOverview.Contains(PromptComposer.OutlineRepairHeading, StringComparison.Ordinal)
-            || prompt.UserOverview.Contains(PromptComposer.OutlineHeading, StringComparison.Ordinal))
+        if (prompt.Kind is PromptKind.WorkflowOutline or PromptKind.OutlineRepair)
         {
             return """
                 {
@@ -43,7 +42,7 @@ public sealed class StubLlmClient : ILlmClient
                 """;
         }
 
-        if (prompt.UserOverview.Contains("タイトル案と冒頭段落案の生成", StringComparison.Ordinal))
+        if (prompt.Kind is PromptKind.WorkflowTitleHook)
         {
             return string.Join("\n---\n", new[]
             {

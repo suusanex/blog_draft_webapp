@@ -49,6 +49,7 @@ dotnet run
 
 - `OpenAI__ApiKey`
 - `OpenAI__Model`
+- `OpenAI__UseStructuredJsonSchema`（対応していない互換APIでは `false` にすると `json_object` を使用）
 - `StyleCard__SystemPrompt`
 - `StyleCard__Content`
 

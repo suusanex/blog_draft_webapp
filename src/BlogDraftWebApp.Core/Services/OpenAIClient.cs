@@ -56,7 +56,9 @@ public sealed class OpenAiLlmClient : ILlmClient
 
             if (RequiresJsonResponse(prompt))
             {
-                body["response_format"] = BuildJsonResponseFormat(prompt);
+                body["response_format"] = _options.UseStructuredJsonSchema
+                    ? BuildJsonResponseFormat(prompt)
+                    : new Dictionary<string, object?> { ["type"] = "json_object" };
             }
 
             if (ShouldUseLowTemperature(prompt) && SupportsCustomTemperature(_options.Model))
@@ -109,6 +111,18 @@ public sealed class OpenAiLlmClient : ILlmClient
                 && !string.Equals(finishReason, "stop", StringComparison.OrdinalIgnoreCase))
             {
                 _logger.LogWarning("LLM output did not terminate normally. FinishReason={FinishReason}", finishReason);
+                if (string.Equals(finishReason, "length", StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new LlmException(
+                        "LLM_OUTPUT_TRUNCATED",
+                        "生成結果が出力上限で途中終了しました。もう一度お試しください",
+                        isRetryable: true);
+                }
+
+                throw new LlmException(
+                    "LLM_OUTPUT_INVALID",
+                    "生成結果が正常に完了しませんでした。もう一度お試しください",
+                    isRetryable: true);
             }
 
             var content = choice
@@ -130,6 +144,7 @@ public sealed class OpenAiLlmClient : ILlmClient
                 Model = _options.Model,
                 GeneratedAt = DateTimeOffset.UtcNow,
                 TokensUsed = tokens,
+                FinishReason = finishReason,
             };
         }
         catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
@@ -146,19 +161,20 @@ public sealed class OpenAiLlmClient : ILlmClient
 
     private static bool ShouldUseLowTemperature(Prompt prompt)
     {
-        return prompt.UserOverview.Contains(PromptComposer.OutlineHeading, StringComparison.Ordinal)
-            || prompt.UserOverview.Contains(PromptComposer.OutlineRepairHeading, StringComparison.Ordinal);
+        return prompt.Kind is PromptKind.WorkflowOutline or PromptKind.OutlineRepair;
     }
 
     private static bool RequiresJsonResponse(Prompt prompt)
     {
-        return prompt.UserOverview.Contains("- JSON のみを返す", StringComparison.Ordinal);
+        return prompt.Kind is PromptKind.OneShotDraft
+            or PromptKind.WorkflowOutline
+            or PromptKind.WorkflowDraft
+            or PromptKind.OutlineRepair;
     }
 
     private static object BuildJsonResponseFormat(Prompt prompt)
     {
-        var isOutline = prompt.UserOverview.Contains(PromptComposer.OutlineHeading, StringComparison.Ordinal)
-            || prompt.UserOverview.Contains(PromptComposer.OutlineRepairHeading, StringComparison.Ordinal);
+        var isOutline = prompt.Kind is PromptKind.WorkflowOutline or PromptKind.OutlineRepair;
 
         return new Dictionary<string, object?>
         {

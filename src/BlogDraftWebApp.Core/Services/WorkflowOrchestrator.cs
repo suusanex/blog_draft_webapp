@@ -186,7 +186,6 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
             var parsed = GeneratedContentParser.ParseDraft(draft.Content);
             if (!parsed.IsValid)
             {
-                var initialDraft = draft;
                 draft = await _llmClient.GenerateAsync(
                     _promptComposer.ComposeDraftRepair(
                         session.InitialInput,
@@ -194,21 +193,11 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
                         draft.Content,
                         parsed.ErrorMessage ?? "下書き生成結果を解釈できませんでした。",
                         session.OutlineConfirmed,
-                        session.EditorialMemoJson),
+                        session.EditorialMemoJson,
+                        PromptKind.WorkflowDraft),
                     cancellationToken,
                     null);
                 parsed = GeneratedContentParser.ParseDraft(draft.Content);
-                if (!parsed.IsValid
-                    && GeneratedContentParser.TryRecoverMarkdownDraft(draft.Content, out var recovered))
-                {
-                    parsed = recovered;
-                }
-                else if (!parsed.IsValid
-                    && GeneratedContentParser.TryRecoverMarkdownDraft(initialDraft.Content, out recovered))
-                {
-                    draft = initialDraft;
-                    parsed = recovered;
-                }
             }
 
             EnsureValidDraftGeneration(parsed);
@@ -547,7 +536,17 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
         }
 
         var leadingSpaces = CountLeadingSpaces(unquoted);
-        var depth = Math.Min(leadingSpaces / 2, _options.OutlineMaxDepth);
+        if (leadingSpaces % 2 != 0)
+        {
+            return false;
+        }
+
+        var depth = leadingSpaces / 2;
+        if (depth > _options.OutlineMaxDepth)
+        {
+            return false;
+        }
+
         var indent = new string(' ', depth * 2);
 
         string? text = null;

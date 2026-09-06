@@ -31,5 +31,6 @@ public interface IPromptComposer
         string rawContent,
         string validationMessage,
         string? outline = null,
-        string? editorialMemo = null);
+        string? editorialMemo = null,
+        PromptKind kind = PromptKind.OneShotDraft);
 }

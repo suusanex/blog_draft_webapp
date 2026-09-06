@@ -21,6 +21,7 @@ public sealed class PromptComposer : IPromptComposer
 
         var prompt = new Prompt
         {
+            Kind = PromptKind.OneShotDraft,
             SystemMessage = BuildSystemMessage(styleCard),
             RagContext = string.Empty,
             UserOverview = BuildOneShotUserContent(overview),
@@ -45,6 +46,13 @@ public sealed class PromptComposer : IPromptComposer
 
         var prompt = new Prompt
         {
+            Kind = step switch
+            {
+                WorkflowStep.Step1_Outline => PromptKind.WorkflowOutline,
+                WorkflowStep.Step2_Draft => PromptKind.WorkflowDraft,
+                WorkflowStep.Step3_TitleHook => PromptKind.WorkflowTitleHook,
+                _ => PromptKind.Unknown,
+            },
             SystemMessage = BuildSystemMessage(styleCard),
             RagContext = string.Empty,
             UserOverview = BuildStepUserContent(step, overview, outline, draft, editorialMemo),
@@ -60,6 +68,7 @@ public sealed class PromptComposer : IPromptComposer
 
         var prompt = new Prompt
         {
+            Kind = PromptKind.WorkflowTitleHook,
             SystemMessage = BuildSystemMessage(styleCard),
             RagContext = string.Empty,
             UserOverview = BuildStandaloneTitleHookUserContent(articleBody),
@@ -81,6 +90,7 @@ public sealed class PromptComposer : IPromptComposer
 
         return new Prompt
         {
+            Kind = PromptKind.OutlineRepair,
             SystemMessage = BuildSystemMessage(styleCard),
             RagContext = string.Empty,
             UserOverview = string.Join("\n", new[]
@@ -118,13 +128,15 @@ public sealed class PromptComposer : IPromptComposer
         string rawContent,
         string validationMessage,
         string? outline = null,
-        string? editorialMemo = null)
+        string? editorialMemo = null,
+        PromptKind kind = PromptKind.OneShotDraft)
     {
         ArgumentNullException.ThrowIfNull(overview);
         ArgumentNullException.ThrowIfNull(styleCard);
 
         return new Prompt
         {
+            Kind = kind,
             SystemMessage = BuildSystemMessage(styleCard),
             RagContext = string.Empty,
             UserOverview = string.Join("\n", new[]

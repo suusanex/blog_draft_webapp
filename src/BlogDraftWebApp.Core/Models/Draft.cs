@@ -6,4 +6,5 @@ public sealed class Draft
     public string Model { get; init; } = string.Empty;
     public DateTimeOffset GeneratedAt { get; init; } = DateTimeOffset.UtcNow;
     public int? TokensUsed { get; init; }
+    public string? FinishReason { get; init; }
 }

@@ -58,7 +58,6 @@ public static class DraftEndpoints
             var parsed = GeneratedContentParser.ParseDraft(generated.Content);
             if (!parsed.IsValid)
             {
-                var initialGenerated = generated;
                 generated = await llmClient.GenerateAsync(
                     promptComposer.ComposeDraftRepair(
                         new BlogOverview(request!.Overview),
@@ -67,17 +66,6 @@ public static class DraftEndpoints
                         parsed.ErrorMessage ?? "下書き生成結果を解釈できませんでした。"),
                     cancellationToken);
                 parsed = GeneratedContentParser.ParseDraft(generated.Content);
-                if (!parsed.IsValid
-                    && GeneratedContentParser.TryRecoverMarkdownDraft(generated.Content, out var recovered))
-                {
-                    parsed = recovered;
-                }
-                else if (!parsed.IsValid
-                    && GeneratedContentParser.TryRecoverMarkdownDraft(initialGenerated.Content, out recovered))
-                {
-                    generated = initialGenerated;
-                    parsed = recovered;
-                }
             }
 
             if (!parsed.IsValid)

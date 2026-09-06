@@ -63,9 +63,7 @@ public sealed class GeneratedContentParserTests
     [Test]
     public void ParseDraft_JSONでない場合は無効として原文を本文にしない()
     {
-        var raw = "# 見出し\n\n本文";
-
-        var parsed = GeneratedContentParser.ParseDraft(raw);
+        var parsed = GeneratedContentParser.ParseDraft("# 見出し\n\n本文");
 
         Assert.That(parsed.FromJson, Is.False);
         Assert.That(parsed.IsValid, Is.False);
@@ -74,7 +72,7 @@ public sealed class GeneratedContentParserTests
     }
 
     [Test]
-    public void ParseDraft_壊れたJSONは無効として要確認事項も返さない()
+    public void ParseDraft_壊れたJSONから本文だけを救済せず無効にする()
     {
         var parsed = GeneratedContentParser.ParseDraft("{\"draft\":\"本文\",\"openQuestions\":[}");
 
@@ -84,61 +82,35 @@ public sealed class GeneratedContentParserTests
     }
 
     [Test]
-    public void TryRecoverMarkdownDraft_JSON再整形後もMarkdownなら本文として復旧する()
+    public void ParseDraft_openQuestionsが欠落している場合は無効にする()
     {
-        var recovered = GeneratedContentParser.TryRecoverMarkdownDraft(
-            "# 見出し\n\n本文",
-            out var parsed);
+        var parsed = GeneratedContentParser.ParseDraft("{\"draft\":\"本文\"}");
 
-        Assert.That(recovered, Is.True);
-        Assert.That(parsed.IsValid, Is.True);
-        Assert.That(parsed.FromJson, Is.False);
-        Assert.That(parsed.Draft, Is.EqualTo("# 見出し\n\n本文"));
+        Assert.That(parsed.IsValid, Is.False);
+        Assert.That(parsed.Draft, Is.Empty);
         Assert.That(parsed.OpenQuestions, Is.Empty);
     }
 
     [Test]
-    public void TryRecoverMarkdownDraft_説明文だけは復旧しない()
+    public void ParseDraft_openQuestionsが文字列配列でない場合は無効にする()
     {
-        var recovered = GeneratedContentParser.TryRecoverMarkdownDraft("JSONではありません", out _);
+        var parsed = GeneratedContentParser.ParseDraft("{\"draft\":\"本文\",\"openQuestions\":\"確認事項\"}");
 
-        Assert.That(recovered, Is.False);
+        Assert.That(parsed.IsValid, Is.False);
+        Assert.That(parsed.Draft, Is.Empty);
+        Assert.That(parsed.OpenQuestions, Is.Empty);
     }
 
     [Test]
-    public void ParseDraft_二重化されたJSON本文を1段だけアンラップする()
+    public void ParseDraft_入れ子JSONをアンラップせず本文として扱う()
     {
-        var parsed = GeneratedContentParser.ParseDraft(
-            "{\"draft\":\"{\\\"draft\\\":\\\"本文\\\",\\\"openQuestions\\\":[\\\"確認事項\\\"]}\",\"openQuestions\":[]}");
-
-        Assert.That(parsed.IsValid, Is.True);
-        Assert.That(parsed.Draft, Is.EqualTo("本文"));
-        Assert.That(parsed.OpenQuestions, Is.EqualTo(new[] { "確認事項" }));
-    }
-
-    [Test]
-    public void ParseDraft_多重化されたJSON本文も有限回でアンラップする()
-    {
-        var inner = "{\"draft\":\"本文\",\"openQuestions\":[\"確認事項\"]}";
-        var middle = $"{{\"draft\":{System.Text.Json.JsonSerializer.Serialize(inner)},\"openQuestions\":[]}}";
-        var raw = $"{{\"draft\":{System.Text.Json.JsonSerializer.Serialize(middle)},\"openQuestions\":[]}}";
+        var raw = "{\"draft\":\"{\\\"draft\\\":\\\"本文\\\",\\\"openQuestions\\\":[\\\"確認事項\\\"]}\",\"openQuestions\":[]}";
 
         var parsed = GeneratedContentParser.ParseDraft(raw);
 
         Assert.That(parsed.IsValid, Is.True);
-        Assert.That(parsed.Draft, Is.EqualTo("本文"));
-        Assert.That(parsed.OpenQuestions, Is.EqualTo(new[] { "確認事項" }));
-    }
-
-    [Test]
-    public void ParseDraft_壊れたJSONから十分な長さのdraft文字列を救済する()
-    {
-        var body = "# 見出し\n\nこれは壊れたJSONでも保持して返す十分な長さの本文です。";
-        var parsed = GeneratedContentParser.ParseDraft($"{{\"draft\":{System.Text.Json.JsonSerializer.Serialize(body)},\"openQuestions\":[}}");
-
-        Assert.That(parsed.IsValid, Is.True);
-        Assert.That(parsed.FromJson, Is.False);
-        Assert.That(parsed.Draft, Is.EqualTo(body));
+        Assert.That(parsed.Draft, Does.StartWith("{\"draft\":"));
+        Assert.That(parsed.OpenQuestions, Is.Empty);
     }
 
     [Test]
